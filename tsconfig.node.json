@@ -1,0 +1,13 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": ["electron.vite.config.*", "src/main/**/*", "src/preload/**/*", "src/core/**/*", "src/game/**/*", "src/server/**/*", "vitest.config.ts"],
+  "compilerOptions": {
+    "composite": true,
+    "types": ["electron-vite/node"],
+    "paths": {
+      "@core/*": ["./src/core/*"],
+      "@game/*": ["./src/game/*"],
+      "@server/*": ["./src/server/*"]
+    }
+  }
+}
