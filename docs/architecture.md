@@ -48,6 +48,9 @@ Conséquences :
 
 - `FrameSource` est une interface : connexion au jeu ou rejeu d'une capture (en respectant `t`). Le reste de la chaîne ne voit pas la différence.
 - `normalize()`, `MatchTracker` et `SessionStore` sont du TypeScript pur, sans Electron → testables directement avec les captures de `captures/`.
+- `normalize(raw)` est une fonction PURE, sans état : elle renvoie `null` pour tout message ignoré (illisible, type non géré, schéma non respecté, but fantôme, `CrossbarHit` de force ≤ 0). Le dédoublonnage des rafales de `CrossbarHit` demande de mémoriser le précédent : il est dans `createCrossbarDedupe()` (`src/core/dedupe.ts`), un filtre à état à créer par flux de trames.
+- Deux niveaux de types dans `src/core` : schémas zod du brut de l'API (`schemas.ts`, internes, champs utilisés seulement, champs inconnus tolérés) et contrat normalisé en camelCase (`events.ts`, partagé avec le serveur et les overlays).
+- `FrameSource` (`src/game/FrameSource.ts`) : `onFrame`, `start`, `stop`. Le format des trames de capture (`RawFrame { t, raw }`) et son parsing pur (`parseCaptureText`) sont dans `src/core` ; la lecture de fichier et le gunzip sont dans `ReplaySource`, pour que `core` n'accède pas au disque. `ReplaySource` compare chaque trame à l'horloge réelle (pas de dérive cumulée) ; `speed: Infinity` émet tout d'un coup (tests).
 
 ## Statut de connexion (P5)
 
