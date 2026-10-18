@@ -51,12 +51,17 @@ Conséquences :
 - `normalize(raw)` est une fonction PURE, sans état : elle renvoie `null` pour tout message ignoré (illisible, type non géré, schéma non respecté, but fantôme, `CrossbarHit` de force ≤ 0). Le dédoublonnage des rafales de `CrossbarHit` demande de mémoriser le précédent : il est dans `createCrossbarDedupe()` (`src/core/dedupe.ts`), un filtre à état à créer par flux de trames.
 - Deux niveaux de types dans `src/core` : schémas zod du brut de l'API (`schemas.ts`, internes, champs utilisés seulement, champs inconnus tolérés) et contrat normalisé en camelCase (`events.ts`, partagé avec le serveur et les overlays).
 - `FrameSource` (`src/game/FrameSource.ts`) : `onFrame`, `start`, `stop`. Le format des trames de capture (`RawFrame { t, raw }`) et son parsing pur (`parseCaptureText`) sont dans `src/core` ; la lecture de fichier et le gunzip sont dans `ReplaySource`, pour que `core` n'accède pas au disque. `ReplaySource` compare chaque trame à l'horloge réelle (pas de dérive cumulée) ; `speed: Infinity` émet tout d'un coup (tests).
+- `GameConnection` (`src/game/GameConnection.ts`) implémente `FrameSource` sur `ws://127.0.0.1:49124` (IPv4 explicite : `localhost` peut se résoudre en `::1`). Les trames sont horodatées comme une capture (`t` = ms depuis `start()`). Reconnexion sans fin, attente doublée de 1 s jusqu'à 5 s, remise à 1 s après une connexion réussie. Son statut est binaire (`connected` / `disconnected`) : la distinction `game-closed` / `api-disabled` demande la détection du processus du jeu (P5).
+- `StatsPipeline` (`src/core/pipeline.ts`) relie `normalize` → `createCrossbarDedupe` → `MatchTracker` → `SessionStore` et notifie par callbacks (`onMatch`, `onSession`, `onEvent`). Pure, indépendante de la source et du serveur : c'est le processus principal qui branche `source.onFrame → pipeline.feed` et `pipeline → server.publish`. Ordre de notification pour une même trame : match, puis session, puis event (un overlay qui réagit à `matchEnded` lit déjà le nouveau compteur).
+- `MatchTracker` (`src/core/MatchTracker.ts`) : le match naît de la première trame d'état (elles précèdent parfois `MatchCreated`). Un replay d'historique est actif de `ReplayCreated` (ou d'une trame avec `Game.Frame`) jusqu'à la première trame d'état sans `Frame` : pendant ce temps AUCUN effet (ni état, ni résultat, ni event vers les overlays, ni apprentissage du joueur). Un nouveau GUID (ou un changement de mode quand un GUID est vide) sans `MatchDestroyed` clôt l'ancien match comme abandonné. Sans équipe connue pour le joueur local, un `MatchEnded` ne produit pas de résultat (on ne devine pas).
 
 ## Statut de connexion (P5)
 
 - `game-closed` : processus du jeu absent.
 - `api-disabled` : jeu lancé mais port 49124 injoignable (ini non configuré ou modifié sans relance).
 - `connected` : connexion WS établie.
+
+`GameConnection` ne connaît que `connected` / `disconnected` ; le passage à ces trois statuts (détection du processus du jeu) est à faire en P5. En attendant, un lien coupé est publié comme `game-closed`.
 
 ## Commandes vers le jeu (P5)
 
@@ -72,7 +77,9 @@ Conséquences :
 
 Filtre : liste d'exclusion, pour que les modes non encore vus (extra modes, tournois) comptent par défaut.
 
-- Exclus : PlaylistId 9 (freeplay) et les replays d'historique (`Game.Frame` présent).
+- Exclus : PlaylistId 9 (freeplay) et les replays d'historique (`Game.Frame` présent). Le replay est écarté en amont par `MatchTracker` ; le freeplay est écarté par `SessionStore` (`EXCLUDED_PLAYLIST_IDS`).
+- `SessionStore` dédoublonne par `MatchGuid` (les GUID comptés survivent à `reset()`) ; un GUID vide ne sert pas de clé.
+- `streak` est signée : > 0 victoires d'affilée, < 0 défaites d'affilée, 0 sans résultat ; `bestStreak` = meilleure série de victoires.
 - Les parties privées (6) COMPTENT : elles servent au score des BO. Score d'un BO = compteur de session remis à zéro avant la série.
 - Chaque résultat transmis aux overlays porte son `playlistId`, pour qu'un overlay puisse distinguer privé / en ligne.
 
@@ -210,7 +217,16 @@ RLStudio.on('connection', (c) => {
 ```
 
 Messages sur le fil : `{ "v": 1, "type": "<topic>", "payload": { ... } }`.
-À la connexion, le serveur envoie immédiatement la dernière valeur connue de chaque topic demandé.
+
+Connexion : `ws://127.0.0.1:<port>/ws?topics=session,match`. Sans `topics` (ou vide), tous les topics ; `settings` est toujours envoyé ; un nom de topic inconnu est refusé (HTTP 400) pour révéler les fautes de frappe. (En P2, le SDK ajoutera un paramètre `module` : le serveur en déduira les topics d'après le champ `data` du manifeste.)
+
+À la connexion, le serveur envoie immédiatement la dernière valeur connue de chaque topic d'ÉTAT demandé (`settings`, `session`, `match`, `connection`), dans cet ordre. Le topic `event` est un flux ponctuel : il n'est JAMAIS rejoué (un overlay qui se connecte ne doit pas revoir un but vieux de dix minutes). `match` vaut `null` entre deux matchs (valeur d'état à part entière, renvoyée aussi à la connexion).
+
+Contenu des topics (types dans `src/core/protocol.ts`, `match.ts`, `session.ts`) :
+- `match` : `MatchState` (GUID, mode, statut `inProgress`/`ended`, temps, prolongation, replay de but en cours, scores par équipe = `Game.Teams[].Score`, joueurs, `localPlayerId`, `myTeamNum`, `winnerTeamNum`). Limité à 30 messages/s : un envoi immédiat, puis seule la dernière valeur est retenue et envoyée à l'échéance (la valeur finale n'est jamais perdue). Un client trop lent (> 1 Mo en attente) saute des `match`.
+- `event` : tout sauf l'état périodique (→ `match`), l'horloge (incluse dans `match`) et `replayCreated` (interne). Jamais pendant un replay d'historique.
+
+Sécurité : le serveur n'écoute que sur 127.0.0.1 (adresse non configurable). Un site web peut ouvrir un WebSocket vers 127.0.0.1 depuis le navigateur de l'utilisateur : une connexion avec un en-tête `Origin` autre que `http://127.0.0.1:<port>` ou `http://localhost:<port>` est refusée (403) ; sans `Origin` (clients non navigateur) elle est acceptée. Chemin autre que `/ws` : 404. Les messages reçus des overlays sont ignorés (taille max 1 Ko).
 
 Pas de commandes depuis un overlay en v1 : le reset de session passe dans le client. Raison : en OBS, l'overlay n'est pas cliquable, et ça évite qu'un pack tiers agisse sur l'état.
 

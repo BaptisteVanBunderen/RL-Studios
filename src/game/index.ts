@@ -1,3 +1,5 @@
 export type { FrameListener, FrameSource, Unsubscribe } from './FrameSource'
 export { ReplaySource } from './ReplaySource'
 export type { ReplayOptions } from './ReplaySource'
+export { GameConnection, GAME_WEB_PORT } from './GameConnection'
+export type { GameConnectionOptions, LinkStatus } from './GameConnection'
