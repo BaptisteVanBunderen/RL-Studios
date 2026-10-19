@@ -127,27 +127,24 @@ describe('OverlayServer', () => {
       server.publish('connection', { status: 'connected' })
       server.publish('match', match(100))
       server.publish('session', session(2))
-      server.publish('settings', { showBest: true })
       await sleep(10)
 
       const c = await open(server.port)
-      await waitFor(() => c.messages.length === 4)
-      expect(c.types()).toEqual(['settings', 'session', 'match', 'connection'])
-      expect(c.messages[0].payload).toEqual({ showBest: true })
-      expect(c.messages[1].payload).toEqual(session(2))
+      await waitFor(() => c.messages.length === 3)
+      expect(c.types()).toEqual(['session', 'match', 'connection'])
+      expect(c.messages[0].payload).toEqual(session(2))
     })
 
-    it('ne renvoie que les topics demandés (settings toujours inclus)', async () => {
+    it('ne renvoie que les topics demandés', async () => {
       server.publish('session', session(1))
       server.publish('match', match(1))
-      server.publish('settings', { a: 1 })
       server.publish('connection', { status: 'connected' })
       await sleep(10)
 
       const c = await open(server.port, '?topics=session')
-      await waitFor(() => c.messages.length === 2)
+      await waitFor(() => c.messages.length === 1)
       await sleep(30)
-      expect(c.types()).toEqual(['settings', 'session'])
+      expect(c.types()).toEqual(['session'])
     })
 
     it('ne rejoue JAMAIS le flux d’events (un overlay ne doit pas revoir un vieux but)', async () => {

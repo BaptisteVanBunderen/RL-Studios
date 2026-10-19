@@ -43,8 +43,14 @@ export const TOPIC_NAMES: readonly TopicName[] = [
   'connection'
 ]
 
-/** Topics d'état : le serveur mémorise la dernière valeur et la renvoie à la connexion. */
-export const STATE_TOPICS: readonly TopicName[] = ['settings', 'session', 'match', 'connection']
+/**
+ * Topics d'état globaux : le serveur mémorise la dernière valeur et la renvoie à la connexion.
+ * `settings` n'en fait pas partie : il est propre à chaque module (voir OverlayServer).
+ */
+export const STATE_TOPICS: readonly TopicName[] = ['session', 'match', 'connection']
+
+/** Topics que le serveur publie globalement (tous sauf `settings`, propre à chaque module). */
+export type PublishableTopic = Exclude<TopicName, 'settings'>
 
 /** Message sur le fil : `{ "v": 1, "type": "<topic>", "payload": { ... } }`. */
 export interface OverlayMessage<T extends TopicName = TopicName> {

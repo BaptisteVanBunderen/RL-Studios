@@ -21,6 +21,41 @@ export type {
   ConnectionStatus,
   OverlayEvent,
   OverlayMessage,
+  PublishableTopic,
   TopicName,
   TopicPayloads
 } from './protocol'
+export { Emitter } from './emitter'
+export {
+  ANCHORS,
+  ID_PATTERN,
+  MANIFEST_TOPICS,
+  isSafeRelativePath,
+  manifestSchema,
+  parseManifest,
+  settingDefaults
+} from './manifest'
+export type {
+  Anchor,
+  Manifest,
+  ManifestResult,
+  ManifestTopic,
+  ModuleManifest,
+  SettingDefinition
+} from './manifest'
+export { isModuleKey, moduleKey, parseModuleKey } from './packs'
+export type { InvalidPack, LoadedPack, PackScan } from './packs'
+export { DEFAULT_GAME_PORT, DEFAULT_OVERLAY_PORT, defaultConfig, parseConfig } from './config'
+export type { AppConfig, ModuleConfig } from './config'
+export { IPC_EVENTS, IPC_INVOKE, setModuleEnabledArgs, toPacksSnapshot } from './ipc'
+export type {
+  AppState,
+  EventMap,
+  InvalidPackSummary,
+  InvokeMap,
+  ModuleSummary,
+  PackSummary,
+  PacksSnapshot,
+  RlStudioApi,
+  Unsubscribe
+} from './ipc'

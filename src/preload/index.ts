@@ -1,22 +1,27 @@
-import { contextBridge } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { IPC_EVENTS, IPC_INVOKE } from '@core/ipcChannels'
+import type { RlStudioApi, Unsubscribe } from '@core/index'
 
-// Custom APIs for renderer
-const api = {}
+// Preload du CLIENT uniquement (les fenêtres d'overlay n'en ont pas). Il n'expose que cette API
+// typée, jamais `ipcRenderer` lui-même : le client ne peut appeler que ce qui est listé ici.
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
+function subscribe<T>(channel: string, listener: (payload: T) => void): Unsubscribe {
+  const handler = (_event: IpcRendererEvent, payload: T): void => listener(payload)
+  ipcRenderer.on(channel, handler)
+  return () => {
+    ipcRenderer.removeListener(channel, handler)
   }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
 }
+
+const api: RlStudioApi = {
+  getState: () => ipcRenderer.invoke(IPC_INVOKE.getState),
+  reloadPacks: () => ipcRenderer.invoke(IPC_INVOKE.reloadPacks),
+  setModuleEnabled: (moduleKey, enabled) =>
+    ipcRenderer.invoke(IPC_INVOKE.setModuleEnabled, moduleKey, enabled),
+  resetSession: () => ipcRenderer.invoke(IPC_INVOKE.resetSession),
+  onConnection: (listener) => subscribe(IPC_EVENTS.connection, listener),
+  onSession: (listener) => subscribe(IPC_EVENTS.session, listener),
+  onPacks: (listener) => subscribe(IPC_EVENTS.packs, listener)
+}
+
+contextBridge.exposeInMainWorld('rlstudio', api)

@@ -1,8 +1,8 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
+import type { RlStudioApi } from '@core/index'
 
 declare global {
   interface Window {
-    electron: ElectronAPI
-    api: unknown
+    /** API exposée par le preload (`src/preload/index.ts`). */
+    rlstudio: RlStudioApi
   }
 }

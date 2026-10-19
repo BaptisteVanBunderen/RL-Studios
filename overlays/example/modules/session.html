@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Exemple : barre de session</title>
+    <!-- Les URL relatives se résolvent depuis ce fichier : le serveur ajoute un <base> adapté. -->
+    <link rel="stylesheet" href="session.css" />
+  </head>
+  <body>
+    <div class="bar">
+      <span id="link" class="dot" title="Connexion au jeu"></span>
+      <span class="stat"><b id="wins">0</b><i>V</i></span>
+      <span class="stat"><b id="losses">0</b><i>D</i></span>
+      <span class="stat"><b id="streak">0</b><i>série</i></span>
+      <span id="score" class="score"></span>
+    </div>
+
+    <!-- Le SDK : se connecte tout seul et fournit RLStudio.on(...) -->
+    <script src="/sdk/rlstudio.js"></script>
+    <script src="session.js"></script>
+  </body>
+</html>
