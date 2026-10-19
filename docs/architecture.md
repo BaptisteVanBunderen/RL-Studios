@@ -87,13 +87,14 @@ Filtre : liste d'exclusion, pour que les modes non encore vus (extra modes, tour
 
 ```
 src/
-  main/          processus principal (index.ts, ipc/, windows/, config/)
-  core/          normalize, MatchTracker, SessionStore, types des events (sans dépendance Electron)
+  main/          processus principal : index.ts (cycle de vie, seul fichier qui lance Electron),
+                 services.ts (relie tout, sans Electron), ipc/, config/ConfigStore, packs/PackLoader, windows/ (P3)
+  core/          normalize, MatchTracker, SessionStore, manifeste, config, types IPC (sans dépendance Electron)
   game/          GameConnection, ReplaySource, Recorder, GameSetup
-  server/        OverlayServer, sdk/rlstudio.js (servi tel quel)
+  server/        OverlayServer (HTTP + WebSocket), routes, safePath, sdk/rlstudio.js (embarqué tel quel)
   preload/       preload du client uniquement
   renderer/      client React + Tailwind
-overlays/        packs (extraResources → reste éditable après installation)
+overlays/        packs (extraResources → reste éditable après installation) ; `example/` = pack de démonstration du SDK
 captures/        trames de référence (.jsonl.gz) pour le rejeu et les tests
 tools/           scripts autonomes : capture, observation, test des commandes
 docs/            architecture, constats API, guide de création d'overlay (P7)
@@ -171,8 +172,12 @@ docs/            architecture, constats API, guide de création d'overlay (P7)
 - `entry` : chemin relatif au dossier du pack, interdit de sortir du dossier (`..`, chemin absolu).
 - `size` : taille de référence en pixels logiques. L'utilisateur règle une échelle ; les proportions restent verrouillées et le contenu est mis à l'échelle (zoom de la page).
 - `defaultPosition.anchor` : `top-left`, `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right`. `x`/`y` = décalage depuis l'ancre, vers l'intérieur de l'écran, en pixels logiques (indépendant de la mise à l'échelle Windows).
-- `data` : topics dont le module a besoin (`session`, `match`, `events`, `connection`). Le serveur n'envoie que ceux-là ; `settings` est toujours envoyé.
-- Validation au chargement (zod) : un pack invalide apparaît dans la bibliothèque avec son erreur, il n'est pas chargé. Clé inconnue = avertissement, pas une erreur.
+- `data` : topics dont le module a besoin, avec les MÊMES noms que les topics du protocole : `session`, `match`, `event`, `connection` (au singulier pour `event` ; ce document disait `events` par erreur). Le serveur n'envoie que ceux-là ; `settings` est toujours envoyé et ne se liste pas.
+- Validation au chargement (zod, `src/core/manifest.ts`) : un pack invalide apparaît dans la bibliothèque avec son erreur, il n'est pas chargé. Clé inconnue = avertissement, pas une erreur. Messages en français avec le chemin du champ (`modules[0].size.width : …`).
+- Champs facultatifs et valeurs par défaut : `description`, `author` → vides ; `defaultPosition` → `top-left` 0/0 ; `data`, `settings` → vides. Obligatoires : `manifestVersion` (= 1), `name`, `version` (semver), au moins un module avec `id`, `name`, `entry`, `size`.
+- Contrôles de cohérence : identifiants de module et clés de réglage uniques ; `default` d'un réglage dans ses bornes / ses options / `maxLength` ; couleur `#rrggbb[aa]`.
+- `entry` et `preview` : refus lexical (`..`, `/x`, `\x`, `C:\x`) à la validation, puis sur disque (`PackLoader`) : le fichier doit exister, être un fichier et rester dans le pack APRÈS résolution des liens symboliques. Un `preview` introuvable est un avertissement ; une page d'entrée introuvable est une erreur.
+- `PackLoader` : un sous-dossier de `overlays/` = un pack, identifiant = nom du dossier (`[a-z0-9-]`, sinon pack invalide). Les fichiers et dossiers cachés sont ignorés. Un `manifest.json` avec BOM UTF-8 (éditeurs Windows) est accepté ; au-delà de 1 Mo il est refusé. Un pack cassé n'empêche pas les autres de se charger ; l'actualisation est à la demande (bouton du client), pas surveillée.
 
 ### Les six types de réglages (P4)
 
@@ -218,17 +223,35 @@ RLStudio.on('connection', (c) => {
 
 Messages sur le fil : `{ "v": 1, "type": "<topic>", "payload": { ... } }`.
 
-Connexion : `ws://127.0.0.1:<port>/ws?topics=session,match`. Sans `topics` (ou vide), tous les topics ; `settings` est toujours envoyé ; un nom de topic inconnu est refusé (HTTP 400) pour révéler les fautes de frappe. (En P2, le SDK ajoutera un paramètre `module` : le serveur en déduira les topics d'après le champ `data` du manifeste.)
+Connexion : `ws://127.0.0.1:<port>/ws?module=<pack>/<module>`. Le SDK la construit seul d'après l'URL de la page (`/overlay/<pack>/<module>`). Les topics reçus sont ceux du champ `data` du manifeste du module ; un module ou un pack inconnu est refusé (404). Pour les outils de développement, `?topics=session,match` impose les topics (il l'emporte sur `data`) ; sans `module` ni `topics`, tous les topics. Un nom de topic inconnu est refusé (400) pour révéler les fautes de frappe.
 
-À la connexion, le serveur envoie immédiatement la dernière valeur connue de chaque topic d'ÉTAT demandé (`settings`, `session`, `match`, `connection`), dans cet ordre. Le topic `event` est un flux ponctuel : il n'est JAMAIS rejoué (un overlay qui se connecte ne doit pas revoir un but vieux de dix minutes). `match` vaut `null` entre deux matchs (valeur d'état à part entière, renvoyée aussi à la connexion).
+`settings` est PROPRE À CHAQUE MODULE : ce n'est pas un topic global. À la connexion le serveur envoie d'abord les réglages du module (défauts du manifeste, plus tard les valeurs de l'utilisateur, P4), puis la dernière valeur connue de chaque topic d'ÉTAT demandé (`session`, `match`, `connection`), dans cet ordre. `server.publishSettings(<pack>/<module>, valeurs)` pousse de nouveaux réglages aux overlays ouverts de ce module, sans rechargement. Les clients sans `module` ne reçoivent aucun `settings`. Le topic `event` est un flux ponctuel : il n'est JAMAIS rejoué (un overlay qui se connecte ne doit pas revoir un but vieux de dix minutes). `match` vaut `null` entre deux matchs (valeur d'état à part entière, renvoyée aussi à la connexion).
+
+Routes HTTP du même serveur (`src/server/routes.ts`), méthodes GET et HEAD seulement (sinon 405) :
+
+- `/sdk/rlstudio.js` : le SDK, servi tel quel. Il est embarqué dans le processus principal (`import … ?raw`) : pas de chemin à résoudre dans l'application installée, pas d'`extraResources` pour lui.
+- `/overlay/<pack>/<module>` : la page d'entrée du module, avec un `<base href>` injecté (dossier du fichier d'entrée) pour que ses URL relatives (`session.css`, `../img/x.png`) fonctionnent alors que la page est servie sans extension. Les commentaires HTML sont ignorés pour la détection de `<head>` et d'un `<base>` existant (une page qui définit déjà son `<base>` est laissée telle quelle).
+- `/overlay/<pack>/<chemin>` : un fichier du pack (styles, scripts, images, polices, sons), avec le bon `Content-Type`, `Cache-Control: no-store` (les packs sont éditables : toujours la version du disque) et `nosniff`. Un identifiant de module prime sur un fichier de même nom.
+- Le reste : 404. Chemins refusés (400/404) : segment `..` ou `.`, segments vides (`//`), `\`, `/` ou `:` après décodage (lecteurs Windows, flux NTFS), octet nul, pourcentage mal formé. Le chemin est ensuite résolu avec `realpath` et doit rester dans le dossier du pack (liens symboliques sortants refusés, `pack-evil` ne passe pas pour un sous-dossier de `pack`).
 
 Contenu des topics (types dans `src/core/protocol.ts`, `match.ts`, `session.ts`) :
+
 - `match` : `MatchState` (GUID, mode, statut `inProgress`/`ended`, temps, prolongation, replay de but en cours, scores par équipe = `Game.Teams[].Score`, joueurs, `localPlayerId`, `myTeamNum`, `winnerTeamNum`). Limité à 30 messages/s : un envoi immédiat, puis seule la dernière valeur est retenue et envoyée à l'échéance (la valeur finale n'est jamais perdue). Un client trop lent (> 1 Mo en attente) saute des `match`.
 - `event` : tout sauf l'état périodique (→ `match`), l'horloge (incluse dans `match`) et `replayCreated` (interne). Jamais pendant un replay d'historique.
 
 Sécurité : le serveur n'écoute que sur 127.0.0.1 (adresse non configurable). Un site web peut ouvrir un WebSocket vers 127.0.0.1 depuis le navigateur de l'utilisateur : une connexion avec un en-tête `Origin` autre que `http://127.0.0.1:<port>` ou `http://localhost:<port>` est refusée (403) ; sans `Origin` (clients non navigateur) elle est acceptée. Chemin autre que `/ws` : 404. Les messages reçus des overlays sont ignorés (taille max 1 Ko).
 
 Pas de commandes depuis un overlay en v1 : le reset de session passe dans le client. Raison : en OBS, l'overlay n'est pas cliquable, et ça évite qu'un pack tiers agisse sur l'état.
+
+## Processus principal et client (P2)
+
+- `src/main/index.ts` est le seul fichier qui lance Electron : instance unique (`requestSingleInstanceLock`, deux instances se disputeraient le port), création de la fenêtre du client, arrêt propre. Tout le reste vit dans `Services` (`src/main/services.ts`), sans dépendance à Electron donc testable en Node avec un faux jeu.
+- `Services` crée et relie : `ConfigStore`, `PackLoader`, `OverlayServer`, `StatsPipeline`, `GameConnection`. Démarrage : packs → serveur (échec = erreur en français, la connexion au jeu n'est pas démarrée) → connexion au jeu. Arrêt : connexion → serveur et ses clients (WebSocket fermés en 1001, connexions HTTP coupées) → fin des écritures de config. `before-quit` suspend la fermeture le temps de cet arrêt.
+- Fermer la fenêtre du client quitte l'application (les overlays en dépendent). Port pris au démarrage : boîte de dialogue qui indique le port et le fichier de config où le changer.
+- Config (`ConfigStore`, `<userData>/config.json`) : ports du serveur d'overlays (49200) et de l'API (49124), `localPlayerId` (mémorisé dès que `Game.Target` le désigne), `modules[<pack>/<module>].enabled`. Fichier absent → défauts ; invalide champ par champ → ce champ redevient son défaut sans perdre les autres ; JSON illisible → défauts et copie du fichier en `.bak` (le client prévient) ; clés inconnues conservées ; écritures atomiques (fichier temporaire puis renommage) et sérialisées.
+- Les valeurs par défaut des ports sont codées dans `src/core/config.ts` ET dans `GameConnection` : un test les compare.
+- IPC typé (`src/core/ipc.ts`, canaux dans `ipcChannels.ts`, sans import pour que le preload puisse l'utiliser) : requêtes `app:get-state`, `packs:reload`, `modules:set-enabled`, `session:reset` ; notifications `app:connection`, `app:session`, `app:packs`. Le preload n'expose que `window.rlstudio` (jamais `ipcRenderer`) ; la fenêtre du client est en `contextIsolation` et `sandbox`. Le main vérifie que l'appel vient de la fenêtre du client et revalide les arguments (zod). Rien de ce qui traverse l'IPC ne contient de chemin absolu.
+- Activer un module (`modules:set-enabled`) ne fait que mémoriser le choix et notifier `app:packs` ; ouvrir/fermer la fenêtre d'overlay correspondante est la carte P3 (elle s'abonne à `services.onPacks`).
 
 ## Fenêtres d'overlay (P3)
 

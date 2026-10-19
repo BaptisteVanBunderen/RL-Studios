@@ -1,74 +1,136 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import icon from '../../resources/RL-Studio_logo.png?asset'
+import sdkSource from '../server/sdk/rlstudio.js?raw'
+import { registerIpc } from './ipc/register'
+import { Services } from './services'
 
-function createWindow(): void {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
+let mainWindow: BrowserWindow | null = null
+let services: Services | null = null
+let disposeIpc: (() => void) | null = null
+let quitting = false
+
+/** Dossier des packs : à la racine du projet en développement, dans les ressources une fois installé. */
+function overlaysDir(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'overlays')
+    : join(app.getAppPath(), 'overlays')
+}
+
+function createWindow(): BrowserWindow {
+  const window = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    title: 'RL Studio',
+    icon,
     webPreferences: {
+      // Le client n'a accès au processus principal que par l'API typée du preload.
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      contextIsolation: true,
+      sandbox: true
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  window.on('ready-to-show', () => window.show())
+  window.on('closed', () => {
+    mainWindow = null
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
+  // Le client ne navigue jamais ailleurs que sur ses propres pages.
+  const ownPages =
+    is.dev && process.env['ELECTRON_RENDERER_URL']
+      ? process.env['ELECTRON_RENDERER_URL']
+      : 'file://'
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(ownPages)) event.preventDefault()
+  })
+
+  // HMR en développement ; fichier local une fois installé.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    void window.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    void window.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  return window
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
-  // Set app user model id for windows
+async function start(): Promise<void> {
   electronApp.setAppUserModelId('com.thevbat.rlstudio')
+  app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+  const created = new Services({
+    configFile: join(app.getPath('userData'), 'config.json'),
+    overlaysDir: overlaysDir(),
+    sdkSource
   })
+  services = created
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
-
-  createWindow()
-
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
-
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
+  try {
+    await created.start()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    dialog.showErrorBox(
+      'RL Studio ne peut pas démarrer',
+      `${message}\n\nFermez l'autre application qui utilise ce port, ou changez « overlayPort » dans :\n${created.config.path}`
+    )
+    quit()
+    return
   }
-})
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
+  if (created.configRecovered) {
+    void dialog.showMessageBox({
+      type: 'warning',
+      title: 'RL Studio',
+      message: 'Le fichier de configuration était illisible.',
+      detail: `Les réglages par défaut sont utilisés. L'ancien fichier est conservé dans :\n${created.config.path}.bak`
+    })
+  }
+
+  disposeIpc = registerIpc(created, () => mainWindow)
+  mainWindow = createWindow()
+}
+
+/** Quitte l'application ; `before-quit` arrête d'abord les services. */
+function quit(): void {
+  app.quit()
+}
+
+// Une seule instance : deux RL Studio se disputeraient le port du serveur d'overlays.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  })
+
+  app.whenReady().then(start, (error) => {
+    console.error('RL Studio : démarrage impossible', error)
+    app.exit(1)
+  })
+
+  // Arrêt propre : on suspend la fermeture le temps de couper la connexion au jeu, fermer le
+  // serveur d'overlays (et ses clients) et terminer l'écriture de la config.
+  app.on('before-quit', (event) => {
+    if (quitting || !services) return
+    event.preventDefault()
+    quitting = true
+    disposeIpc?.()
+    services
+      .stop()
+      .catch((error) => console.error("RL Studio : erreur à l'arrêt des services", error))
+      .finally(() => app.quit())
+  })
+
+  // Fermer la fenêtre du client quitte l'application (les overlays en dépendent).
+  app.on('window-all-closed', () => quit())
+}
