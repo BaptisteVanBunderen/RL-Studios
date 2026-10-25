@@ -1,12 +1,16 @@
 import {
   Emitter,
+  MAX_SCALE,
+  MIN_SCALE,
   StatsPipeline,
   parseModuleKey,
+  positionSchema,
   settingDefaults,
   toPacksSnapshot,
   type AppState,
   type ConnectionStatus,
   type PacksSnapshot,
+  type Position,
   type SessionState,
   type Unsubscribe
 } from '@core/index'
@@ -16,41 +20,23 @@ import { ConfigStore } from './config/ConfigStore'
 import { PackLoader } from './packs/PackLoader'
 
 export interface ServicesOptions {
-  /** Fichier de config (`<dossier utilisateur>/config.json`). */
   configFile: string
-  /** Dossier des packs (`overlays/`). */
   overlaysDir: string
-  /** Code du SDK servi à `/sdk/rlstudio.js`. */
   sdkSource: string
-  /** Remplacent les ports de la config (tests : `0` = port libre). */
   overlayPort?: number
   gameWebPort?: number
 }
 
-/**
- * Tant que la détection du processus du jeu n'existe pas (P5), un lien coupé est publié comme
- * « jeu fermé » ; la distinction avec « API désactivée » viendra avec elle.
- */
 export function toConnectionStatus(link: LinkStatus): ConnectionStatus {
   return link === 'connected' ? 'connected' : 'game-closed'
 }
 
-/**
- * Les services du processus principal, reliés entre eux :
- *
- *   GameConnection ─ trame brute ─► StatsPipeline ─► OverlayServer ─► overlays (app et OBS)
- *                                         └──────────► client (via les `on…` ci-dessous)
- *
- * Aucune dépendance à Electron : la classe se teste en Node avec un faux jeu. Le fichier
- * `index.ts` ne fait que la lancer, l'arrêter et l'exposer au client.
- */
 export class Services {
   readonly config: ConfigStore
   readonly packs: PackLoader
   readonly server: OverlayServer
   readonly pipeline: StatsPipeline
   readonly connection: GameConnection
-  /** `true` si le fichier de config existait mais était illisible (valeurs par défaut utilisées). */
   readonly configRecovered: boolean
 
   private connectionStatus: ConnectionStatus = 'game-closed'
@@ -98,16 +84,11 @@ export class Services {
     this.connection.onFrame((frame) => this.pipeline.feed(frame.raw))
     this.connection.onStatus((link) => this.setConnectionStatus(toConnectionStatus(link)))
 
-    // Valeurs initiales : un overlay qui se connecte reçoit tout de suite un état cohérent.
     this.server.publish('session', this.pipeline.session)
     this.server.publish('match', null)
     this.server.publish('connection', { status: this.connectionStatus })
   }
 
-  /**
-   * Démarre le serveur d'overlays puis la connexion au jeu. Lève une erreur en français si le
-   * port est déjà pris ; dans ce cas, rien d'autre n'est démarré.
-   */
   async start(): Promise<void> {
     if (this.started) return
     await this.packs.scan()
@@ -116,7 +97,6 @@ export class Services {
     this.connection.start()
   }
 
-  /** Arrêt propre : coupe le jeu, ferme le serveur (et ses clients), termine les écritures. */
   async stop(): Promise<void> {
     this.connection.stop()
     await this.server.stop()
@@ -124,7 +104,6 @@ export class Services {
     this.started = false
   }
 
-  /** Instantané complet pour le client. */
   getState(): AppState {
     return {
       connection: this.connectionStatus,
@@ -139,13 +118,11 @@ export class Services {
     return `http://127.0.0.1:${port}`
   }
 
-  /** Relit le dossier des packs (bouton « actualiser » du client). */
   async reloadPacks(): Promise<PacksSnapshot> {
     await this.packs.scan()
     return this.publishPacks()
   }
 
-  /** Active ou désactive un module (`<pack>/<module>`) et mémorise le choix. */
   async setModuleEnabled(key: string, enabled: boolean): Promise<PacksSnapshot> {
     const parsed = parseModuleKey(key)
     if (!parsed) throw new Error(`Identifiant de module invalide : ${key}`)
@@ -155,7 +132,6 @@ export class Services {
       ?.manifest.modules.some((m) => m.id === parsed.moduleId)
     if (enabled && !exists) throw new Error(`Module introuvable : ${key}`)
 
-    // Désactiver un module qui n'a jamais été activé ne doit rien écrire.
     if (enabled || this.config.config.modules[key]) {
       await this.config.update((c) => {
         c.modules[key] = { ...c.modules[key], enabled }
@@ -164,7 +140,38 @@ export class Services {
     return this.publishPacks()
   }
 
-  /** Remet la session à zéro (début d'un BO). */
+  async setModulePlacement(
+    key: string,
+    placement: { position?: Position | null; scale?: number | null }
+  ): Promise<PacksSnapshot> {
+    const parsed = parseModuleKey(key)
+    const exists = parsed
+      ? this.packs.getPack(parsed.packId)?.manifest.modules.some((m) => m.id === parsed.moduleId)
+      : false
+    if (!exists) throw new Error(`Module introuvable : ${key}`)
+
+    const { position, scale } = placement
+    if (position && !positionSchema.safeParse(position).success) {
+      throw new Error('Position invalide (ancre connue, décalages numériques attendus)')
+    }
+    if (
+      typeof scale === 'number' &&
+      !(Number.isFinite(scale) && scale >= MIN_SCALE && scale <= MAX_SCALE)
+    ) {
+      throw new Error(`Échelle invalide : entre ${MIN_SCALE} et ${MAX_SCALE} attendu`)
+    }
+
+    await this.config.update((c) => {
+      const module = { ...c.modules[key], enabled: c.modules[key]?.enabled ?? false }
+      if (position === null) delete module.position
+      else if (position) module.position = { anchor: position.anchor, x: position.x, y: position.y }
+      if (scale === null) delete module.scale
+      else if (typeof scale === 'number') module.scale = scale
+      c.modules[key] = module
+    })
+    return this.publishPacks()
+  }
+
   resetSession(): SessionState {
     this.pipeline.resetSession()
     return this.pipeline.session
@@ -178,7 +185,6 @@ export class Services {
     return this.connectionChanges.on(listener)
   }
 
-  /** Les packs ont été rechargés ou un module a été (dés)activé. */
   onPacks(listener: (packs: PacksSnapshot) => void): Unsubscribe {
     return this.packChanges.on(listener)
   }
@@ -200,7 +206,6 @@ export class Services {
     this.connectionChanges.emit(status)
   }
 
-  /** Le joueur local est appris via `Game.Target` : on le mémorise pour le prochain lancement. */
   private rememberLocalPlayer(): void {
     const id = this.pipeline.tracker.localPlayerId
     if (id !== null && id !== this.config.config.localPlayerId) {

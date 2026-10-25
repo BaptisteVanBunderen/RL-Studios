@@ -174,7 +174,7 @@ const sizeSchema = z.object({
   height: z.number().int().positive().max(10_000)
 })
 
-const positionSchema = z.object({
+export const positionSchema = z.object({
   anchor: z.enum(ANCHORS),
   /** Décalage depuis l'ancre, vers l'intérieur de l'écran, en pixels logiques. */
   x: z.number(),
@@ -219,6 +219,8 @@ export type Manifest = z.output<typeof manifestSchema>
 export type ModuleManifest = Manifest['modules'][number]
 export type SettingDefinition = ModuleManifest['settings'][number]
 export type Anchor = (typeof ANCHORS)[number]
+/** Ancre et décalage d'un module (position par défaut du manifeste ou choix de l'utilisateur). */
+export type Position = z.output<typeof positionSchema>
 export type ManifestTopic = (typeof MANIFEST_TOPICS)[number]
 
 export type ManifestResult =

@@ -33,6 +33,7 @@ export {
   isSafeRelativePath,
   manifestSchema,
   parseManifest,
+  positionSchema,
   settingDefaults
 } from './manifest'
 export type {
@@ -41,11 +42,21 @@ export type {
   ManifestResult,
   ManifestTopic,
   ModuleManifest,
+  Position,
   SettingDefinition
 } from './manifest'
 export { isModuleKey, moduleKey, parseModuleKey } from './packs'
 export type { InvalidPack, LoadedPack, PackScan } from './packs'
-export { DEFAULT_GAME_PORT, DEFAULT_OVERLAY_PORT, defaultConfig, parseConfig } from './config'
+export {
+  DEFAULT_GAME_PORT,
+  DEFAULT_OVERLAY_PORT,
+  MAX_SCALE,
+  MIN_SCALE,
+  defaultConfig,
+  parseConfig
+} from './config'
+export { diffKeys, placeInArea, scaledSize } from './placement'
+export type { Rect, Size } from './placement'
 export type { AppConfig, ModuleConfig } from './config'
 export { IPC_EVENTS, IPC_INVOKE, setModuleEnabledArgs, toPacksSnapshot } from './ipc'
 export type {

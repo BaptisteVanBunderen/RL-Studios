@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { positionSchema, type Position } from './manifest'
 import { isModuleKey } from './packs'
 
 /**
@@ -8,9 +9,20 @@ import { isModuleKey } from './packs'
 export const DEFAULT_OVERLAY_PORT = 49200
 export const DEFAULT_GAME_PORT = 49124
 
-/** Réglages d'un module. P3 y ajoutera position et échelle, P4 les valeurs de réglages. */
+/** Bornes de l'échelle d'un overlay (1 = taille de référence du manifeste). */
+export const MIN_SCALE = 0.25
+export const MAX_SCALE = 4
+
+/**
+ * Réglages d'un module. `position` et `scale` absents = ceux du manifeste / 1.
+ * P4 y ajoutera les valeurs des réglages déclarés dans le manifeste.
+ */
 export interface ModuleConfig {
   enabled: boolean
+  /** Position choisie par l'utilisateur (ancre + décalage en pixels logiques). */
+  position?: Position
+  /** Échelle choisie par l'utilisateur ; les proportions du module sont toujours conservées. */
+  scale?: number
 }
 
 export interface AppConfig {
@@ -36,7 +48,12 @@ const baseSchema = z.object({
   localPlayerId: z.string().min(1).nullable().catch(null)
 })
 
-const moduleSchema = z.looseObject({ enabled: z.boolean().catch(false) })
+// Un champ invalide est simplement ignoré (retour au défaut), sans perdre le reste du module.
+const moduleSchema = z.looseObject({
+  enabled: z.boolean().catch(false),
+  position: positionSchema.optional().catch(undefined),
+  scale: z.number().min(MIN_SCALE).max(MAX_SCALE).optional().catch(undefined)
+})
 
 export function defaultConfig(): AppConfig {
   return {
