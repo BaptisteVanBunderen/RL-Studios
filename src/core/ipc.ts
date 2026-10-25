@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { AppConfig } from './config'
 import { IPC_EVENTS, IPC_INVOKE } from './ipcChannels'
-import type { ManifestTopic, SettingDefinition } from './manifest'
+import type { ManifestTopic, Position, SettingDefinition } from './manifest'
 import { isModuleKey, moduleKey, type PackScan } from './packs'
 import type { ConnectionStatus } from './protocol'
 import type { SessionState } from './session'
@@ -21,6 +21,12 @@ export interface ModuleSummary {
   description: string
   enabled: boolean
   size: { width: number; height: number }
+  /** Position effective : celle de l'utilisateur, sinon celle du manifeste. */
+  position: Position
+  /** Position du manifeste (pour « rétablir »). */
+  defaultPosition: Position
+  /** Échelle effective (1 = taille de référence). */
+  scale: number
   data: ManifestTopic[]
   settings: SettingDefinition[]
 }
@@ -76,6 +82,9 @@ export function toPacksSnapshot(scan: PackScan, config: Pick<AppConfig, 'modules
           description: module.description,
           enabled: config.modules[key]?.enabled === true,
           size: module.size,
+          position: config.modules[key]?.position ?? module.defaultPosition,
+          defaultPosition: module.defaultPosition,
+          scale: config.modules[key]?.scale ?? 1,
           data: module.data,
           settings: module.settings
         }

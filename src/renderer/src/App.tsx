@@ -89,11 +89,21 @@ function PackCard({ pack, baseUrl }: { pack: PackSummary; baseUrl: string }): Re
       <ul className="mt-3 space-y-3">
         {pack.modules.map((m) => (
           <li key={m.key}>
-            <div className="text-sm">
-              {m.name}{' '}
-              <span className="text-xs text-zinc-500">
-                {m.size.width}×{m.size.height}
+            <div className="flex items-center justify-between text-sm">
+              <span>
+                {m.name}{' '}
+                <span className="text-xs text-zinc-500">
+                  {m.size.width}×{m.size.height}
+                </span>
               </span>
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={m.enabled}
+                  onChange={(e) => void window.rlstudio.setModuleEnabled(m.key, e.target.checked)}
+                />
+                Afficher dans le jeu
+              </label>
             </div>
             <div className="text-xs text-zinc-500">URL OBS (source navigateur) :</div>
             <CopyUrl url={`${baseUrl}/overlay/${m.key}`} />

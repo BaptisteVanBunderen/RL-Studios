@@ -251,10 +251,22 @@ Pas de commandes depuis un overlay en v1 : le reset de session passe dans le cli
 - Config (`ConfigStore`, `<userData>/config.json`) : ports du serveur d'overlays (49200) et de l'API (49124), `localPlayerId` (mémorisé dès que `Game.Target` le désigne), `modules[<pack>/<module>].enabled`. Fichier absent → défauts ; invalide champ par champ → ce champ redevient son défaut sans perdre les autres ; JSON illisible → défauts et copie du fichier en `.bak` (le client prévient) ; clés inconnues conservées ; écritures atomiques (fichier temporaire puis renommage) et sérialisées.
 - Les valeurs par défaut des ports sont codées dans `src/core/config.ts` ET dans `GameConnection` : un test les compare.
 - IPC typé (`src/core/ipc.ts`, canaux dans `ipcChannels.ts`, sans import pour que le preload puisse l'utiliser) : requêtes `app:get-state`, `packs:reload`, `modules:set-enabled`, `session:reset` ; notifications `app:connection`, `app:session`, `app:packs`. Le preload n'expose que `window.rlstudio` (jamais `ipcRenderer`) ; la fenêtre du client est en `contextIsolation` et `sandbox`. Le main vérifie que l'appel vient de la fenêtre du client et revalide les arguments (zod). Rien de ce qui traverse l'IPC ne contient de chemin absolu.
-- Activer un module (`modules:set-enabled`) ne fait que mémoriser le choix et notifier `app:packs` ; ouvrir/fermer la fenêtre d'overlay correspondante est la carte P3 (elle s'abonne à `services.onPacks`).
+- Activer un module (`modules:set-enabled`) mémorise le choix et notifie `app:packs` ; `OverlayWindowManager` s'abonne à `services.onPacks` (voir la section suivante) et ouvre ou ferme la fenêtre.
 
-## Fenêtres d'overlay (P3)
+## Fenêtres d'overlay (P2/P3)
 
-- Une fenêtre par module actif : transparente, sans cadre, `alwaysOnTop` (niveau `screen-saver`), ignore la souris hors mode édition, absente de la barre des tâches.
+`OverlayWindowManager` (`src/main/windows/`) : une fenêtre par module activé. Toute la logique est sans Electron (testée avec de fausses fenêtres) ; seul `electronHost.ts` crée les vraies fenêtres.
+
+- `sync(packs)` à chaque `onPacks` : ouvre les modules activés qui manquent, ferme les autres, déplace / redimensionne ceux dont la position, l'échelle ou la taille ont changé (sans réouverture). Un changement d'écran (`display-metrics-changed`, écran branché ou débranché) recalcule toutes les positions. Une fenêtre fermée par le système est oubliée puis rouverte au prochain `sync`. Une page dont le rendu plante est rechargée, 3 fois au plus.
+- Options de fenêtre : transparente (`backgroundColor` `#00000000`), sans cadre, sans ombre, non redimensionnable, `skipTaskbar`, `focusable: false` (ne prend jamais le clavier du jeu), `alwaysOnTop` niveau `screen-saver` (réaffirmé à l'affichage), `setIgnoreMouseEvents(true)` (les clics traversent), `backgroundThrottling: false` (animations non ralenties quand le jeu recouvre la fenêtre). Affichage par `showInactive()` sur `ready-to-show` : `show()` volerait le focus au jeu.
+- Isolation (code de pack tiers) : `contextIsolation`, `sandbox`, pas de `nodeIntegration`, pas de preload ; une session EN MÉMOIRE propre à chaque module (`partition: overlay:<pack>/<module>`) : stockage non partagé entre packs, zoom indépendant, aucune permission accordée ; ni nouvelle fenêtre, ni navigation hors du serveur local.
+- Échelle : `setZoomFactor` (zoom de la page, proportions conservées) et fenêtre à `size × scale`.
+- Placement (`placeInArea`, `src/core/placement.ts`, pur) : ancre + décalage dans la zone de travail de l'écran PRINCIPAL (hors barre des tâches). `x`/`y` vont vers l'intérieur : ancre à gauche/en haut → vers la droite/le bas ; ancre à droite/en bas → vers la gauche/le haut ; axe centré (`top`, `bottom`, `left`, `right`, `center` sur l'axe concerné) → positif vers la droite/le bas. Le résultat est toujours ramené dans la zone : un overlay ne peut pas être perdu hors de l'écran. Coordonnées en pixels logiques d'Electron : la mise à l'échelle de Windows est gérée par Electron.
+- Config par module (`config.modules[<pack>/<module>]`) : `enabled`, `position?` (ancre + décalage), `scale?` (0,25 à 4). Absents : position du manifeste, échelle 1. `services.setModulePlacement(key, { position, scale })` les modifie (`null` = rétablir) ; c'est ce qu'appellera le mode édition.
+- Limite connue : l'overlay est une fenêtre normale posée au-dessus (aucune injection, EAC). Il n'apparaît PAS si Rocket League est en plein écran exclusif : il faut le mode fenêtré ou sans bordure.
+- Hors périmètre pour l'instant (cartes P3 suivantes) : choix de l'écran (multi-écrans), mode édition à la souris, redimensionnement à la souris, raccourci global.
+
+À venir (P3) :
+
 - Mode édition : souris activée, glisser-déposer (CSS `-webkit-app-region: drag` injecté par `insertCSS`), la position est recalculée en ancre + décalage et renvoyée au client.
 - Le raccourci global masque les fenêtres d'overlay de l'app ; il n'agit pas sur OBS (OBS gère ses propres sources).

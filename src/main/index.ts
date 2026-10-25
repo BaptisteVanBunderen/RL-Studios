@@ -5,13 +5,15 @@ import icon from '../../resources/RL-Studio_logo.png?asset'
 import sdkSource from '../server/sdk/rlstudio.js?raw'
 import { registerIpc } from './ipc/register'
 import { Services } from './services'
+import { createElectronHost } from './windows/electronHost'
+import { OverlayWindowManager } from './windows/OverlayWindowManager'
 
 let mainWindow: BrowserWindow | null = null
 let services: Services | null = null
 let disposeIpc: (() => void) | null = null
+let overlayWindows: OverlayWindowManager | null = null
 let quitting = false
 
-/** Dossier des packs : à la racine du projet en développement, dans les ressources une fois installé. */
 function overlaysDir(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'overlays')
@@ -27,7 +29,6 @@ function createWindow(): BrowserWindow {
     title: 'RL Studio',
     icon,
     webPreferences: {
-      // Le client n'a accès au processus principal que par l'API typée du preload.
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       sandbox: true
@@ -37,6 +38,7 @@ function createWindow(): BrowserWindow {
   window.on('ready-to-show', () => window.show())
   window.on('closed', () => {
     mainWindow = null
+    quit()
   })
 
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -44,7 +46,6 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  // Le client ne navigue jamais ailleurs que sur ses propres pages.
   const ownPages =
     is.dev && process.env['ELECTRON_RENDERER_URL']
       ? process.env['ELECTRON_RENDERER_URL']
@@ -53,7 +54,6 @@ function createWindow(): BrowserWindow {
     if (!url.startsWith(ownPages)) event.preventDefault()
   })
 
-  // HMR en développement ; fichier local une fois installé.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     void window.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -95,15 +95,20 @@ async function start(): Promise<void> {
   }
 
   disposeIpc = registerIpc(created, () => mainWindow)
+
+  // Une fenêtre d'overlay par module activé, mise à jour à chaque changement des packs.
+  const windows = new OverlayWindowManager(createElectronHost(), () => created.overlayBaseUrl())
+  overlayWindows = windows
+  windows.sync(created.getState().packs)
+  created.onPacks((packs) => windows.sync(packs))
+
   mainWindow = createWindow()
 }
 
-/** Quitte l'application ; `before-quit` arrête d'abord les services. */
 function quit(): void {
   app.quit()
 }
 
-// Une seule instance : deux RL Studio se disputeraient le port du serveur d'overlays.
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -118,19 +123,15 @@ if (!app.requestSingleInstanceLock()) {
     app.exit(1)
   })
 
-  // Arrêt propre : on suspend la fermeture le temps de couper la connexion au jeu, fermer le
-  // serveur d'overlays (et ses clients) et terminer l'écriture de la config.
   app.on('before-quit', (event) => {
     if (quitting || !services) return
     event.preventDefault()
     quitting = true
     disposeIpc?.()
+    overlayWindows?.dispose()
     services
       .stop()
       .catch((error) => console.error("RL Studio : erreur à l'arrêt des services", error))
       .finally(() => app.quit())
   })
-
-  // Fermer la fenêtre du client quitte l'application (les overlays en dépendent).
-  app.on('window-all-closed', () => quit())
 }
