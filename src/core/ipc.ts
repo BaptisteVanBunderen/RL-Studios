@@ -2,9 +2,12 @@ import { z } from 'zod'
 import type { AppConfig } from './config'
 import { IPC_EVENTS, IPC_INVOKE } from './ipcChannels'
 import type { ManifestTopic, Position, SettingDefinition } from './manifest'
+import { ID_PATTERN, positionSchema } from './manifest'
 import { isModuleKey, moduleKey, type PackScan } from './packs'
+import type { Rect } from './placement'
 import type { ConnectionStatus } from './protocol'
 import type { SessionState } from './session'
+import { resolveSettings, type SettingValue } from './settings'
 
 export { IPC_EVENTS, IPC_INVOKE }
 
@@ -29,6 +32,8 @@ export interface ModuleSummary {
   scale: number
   data: ManifestTopic[]
   settings: SettingDefinition[]
+  /** Valeur effective de chaque réglage : celle de l'utilisateur si valide, sinon le défaut. */
+  values: Record<string, SettingValue>
 }
 
 export interface PackSummary {
@@ -54,10 +59,21 @@ export interface PacksSnapshot {
   invalid: InvalidPackSummary[]
 }
 
+/** Écran sur lequel les overlays sont placés (écran principal pour l'instant). */
+export interface DisplayInfo {
+  /** Texte affiché, ex. « Principal — 2560 × 1440 ». */
+  label: string
+  /** Zone utilisable (hors barre des tâches), en pixels logiques. */
+  workArea: Rect
+}
+
 export interface AppState {
   connection: ConnectionStatus
   session: SessionState
   packs: PacksSnapshot
+  display: DisplayInfo
+  /** Port WebSocket de l'API du jeu auquel l'application se connecte (127.0.0.1). */
+  gamePort: number
   /** `http://127.0.0.1:<port>` : base des URL d'overlay (« Copier l'URL OBS »). */
   overlayBaseUrl: string
 }
@@ -86,7 +102,8 @@ export function toPacksSnapshot(scan: PackScan, config: Pick<AppConfig, 'modules
           defaultPosition: module.defaultPosition,
           scale: config.modules[key]?.scale ?? 1,
           data: module.data,
-          settings: module.settings
+          settings: module.settings,
+          values: resolveSettings(module, config.modules[key]?.settings)
         }
       })
     })),
@@ -103,6 +120,30 @@ export interface InvokeMap {
     result: PacksSnapshot
   }
   [IPC_INVOKE.resetSession]: { args: []; result: SessionState }
+  [IPC_INVOKE.setPackEnabled]: { args: [packId: string, enabled: boolean]; result: PacksSnapshot }
+  [IPC_INVOKE.setModulePlacement]: {
+    args: [moduleKey: string, placement: ModulePlacementChange]
+    result: PacksSnapshot
+  }
+  [IPC_INVOKE.adjustSession]: { args: [values: SessionAdjustment]; result: SessionState }
+  [IPC_INVOKE.openOverlaysFolder]: { args: []; result: void }
+  [IPC_INVOKE.setModuleSetting]: {
+    args: [moduleKey: string, settingKey: string, value: SettingValue]
+    result: PacksSnapshot
+  }
+}
+
+/** `null` rétablit la valeur du manifeste (position) ou 1 (échelle) ; absent = inchangé. */
+export interface ModulePlacementChange {
+  position?: Position | null
+  scale?: number | null
+}
+
+/** Valeurs de session corrigées à la main ; les absentes ne changent pas. */
+export interface SessionAdjustment {
+  wins?: number
+  losses?: number
+  streak?: number
 }
 
 /** Notifications main → client : contenu de chaque canal. */
@@ -120,6 +161,15 @@ export interface RlStudioApi {
   reloadPacks(): Promise<PacksSnapshot>
   setModuleEnabled(moduleKey: string, enabled: boolean): Promise<PacksSnapshot>
   resetSession(): Promise<SessionState>
+  setPackEnabled(packId: string, enabled: boolean): Promise<PacksSnapshot>
+  setModulePlacement(moduleKey: string, placement: ModulePlacementChange): Promise<PacksSnapshot>
+  adjustSession(values: SessionAdjustment): Promise<SessionState>
+  openOverlaysFolder(): Promise<void>
+  setModuleSetting(
+    moduleKey: string,
+    settingKey: string,
+    value: SettingValue
+  ): Promise<PacksSnapshot>
   onConnection(listener: (status: ConnectionStatus) => void): Unsubscribe
   onSession(listener: (session: SessionState) => void): Unsubscribe
   onPacks(listener: (packs: PacksSnapshot) => void): Unsubscribe
@@ -132,4 +182,33 @@ export interface RlStudioApi {
 export const setModuleEnabledArgs = z.tuple([
   z.string().refine(isModuleKey, { error: 'clé de module invalide (attendu : pack/module)' }),
   z.boolean()
+])
+
+export const setPackEnabledArgs = z.tuple([
+  z.string().regex(ID_PATTERN, { error: 'identifiant de pack invalide' }),
+  z.boolean()
+])
+
+export const setModulePlacementArgs = z.tuple([
+  z.string().refine(isModuleKey, { error: 'clé de module invalide (attendu : pack/module)' }),
+  z.strictObject({
+    position: positionSchema.nullable().optional(),
+    // les bornes de l'échelle sont vérifiées par Services.setModulePlacement
+    scale: z.number().nullable().optional()
+  })
+])
+
+export const adjustSessionArgs = z.tuple([
+  z.strictObject({
+    wins: z.number().optional(),
+    losses: z.number().optional(),
+    streak: z.number().optional()
+  })
+])
+
+export const setModuleSettingArgs = z.tuple([
+  z.string().refine(isModuleKey, { error: 'clé de module invalide (attendu : pack/module)' }),
+  z.string().min(1).max(64),
+  // la valeur est vérifiée contre la définition du manifeste par Services.setModuleSetting
+  z.union([z.boolean(), z.number(), z.string().max(1000)])
 ])

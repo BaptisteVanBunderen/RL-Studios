@@ -87,3 +87,62 @@ describe('SessionStore', () => {
     expect(s.state.lastResult?.won).toBe(true)
   })
 })
+
+describe('SessionStore.adjust (correction manuelle)', () => {
+  it('remplace les compteurs fournis et laisse les autres', () => {
+    const s = new SessionStore()
+    s.add(result(true))
+    s.add(result(false))
+    expect(s.adjust({ wins: 12, losses: 3 })).toBe(true)
+    expect(s.state).toMatchObject({ wins: 12, losses: 3, streak: -1 })
+  })
+
+  it('la série corrigée à la hausse relève la meilleure série ; elle ne baisse jamais', () => {
+    const s = new SessionStore()
+    s.adjust({ streak: 4 })
+    expect(s.state).toMatchObject({ streak: 4, bestStreak: 4 })
+    s.adjust({ streak: 1 })
+    expect(s.state).toMatchObject({ streak: 1, bestStreak: 4 })
+    s.adjust({ streak: -3 })
+    expect(s.state).toMatchObject({ streak: -3, bestStreak: 4 })
+  })
+
+  it('ne touche ni au dernier résultat ni aux matchs déjà comptés', () => {
+    const s = new SessionStore()
+    s.add(result(true, { matchGuid: 'X', playlistId: 11 }))
+    s.adjust({ wins: 0 })
+    expect(s.state.lastResult).toEqual({ won: true, playlistId: 11 })
+    expect(s.add(result(true, { matchGuid: 'X' }))).toBe(false) // toujours dédoublonné
+  })
+
+  it('les résultats suivants repartent des valeurs corrigées', () => {
+    const s = new SessionStore()
+    s.adjust({ wins: 12, losses: 3, streak: 4 })
+    s.add(result(true))
+    expect(s.state).toMatchObject({ wins: 13, losses: 3, streak: 5, bestStreak: 5 })
+  })
+
+  it('renvoie false quand rien ne change', () => {
+    const s = new SessionStore()
+    s.adjust({ wins: 2 })
+    expect(s.adjust({ wins: 2 })).toBe(false)
+    expect(s.adjust({})).toBe(false)
+  })
+
+  it.each([-1, 1.5, 10000, NaN, Infinity])('refuse %s pour les victoires et défaites', (value) => {
+    const s = new SessionStore()
+    expect(() => s.adjust({ wins: value })).toThrow('Victoires')
+    expect(() => s.adjust({ losses: value })).toThrow('Défaites')
+    expect(s.state).toEqual(emptySession())
+  })
+
+  it.each([1.5, 10000, -10000, NaN])('refuse %s pour la série', (value) => {
+    expect(() => new SessionStore().adjust({ streak: value })).toThrow('Série')
+  })
+
+  it('une valeur invalide ne modifie rien, même si une autre est valide', () => {
+    const s = new SessionStore()
+    expect(() => s.adjust({ wins: 5, losses: -1 })).toThrow()
+    expect(s.state.wins).toBe(0)
+  })
+})

@@ -80,3 +80,46 @@ export function diffKeys(
     toClose: [...openSet].filter((key) => !wantedSet.has(key))
   }
 }
+
+/**
+ * Inverse de `placeInArea` : le décalage (`x`, `y`) qui, avec cette ancre, place la fenêtre à
+ * `desired` (coin haut-gauche, pixels logiques de l'écran). Sert au client, qui affiche la
+ * position absolue (X, Y) mais mémorise toujours ancre + décalage, indépendant de la résolution.
+ * La position demandée est d'abord ramenée dans la zone, comme le fait `placeInArea`.
+ */
+export function offsetFromPosition(
+  anchor: Position['anchor'],
+  desired: { x: number; y: number },
+  size: Size,
+  area: Rect
+): Position {
+  const horizontal = anchor.includes('left') ? 'start' : anchor.includes('right') ? 'end' : 'middle'
+  const vertical = anchor.startsWith('top')
+    ? 'start'
+    : anchor.startsWith('bottom')
+      ? 'end'
+      : 'middle'
+
+  const x = clamp(Math.round(desired.x), area.x, area.x + Math.max(0, area.width - size.width))
+  const y = clamp(Math.round(desired.y), area.y, area.y + Math.max(0, area.height - size.height))
+
+  return {
+    anchor,
+    x: inverseAxis(horizontal, area.x, area.width, size.width, x),
+    y: inverseAxis(vertical, area.y, area.height, size.height, y)
+  }
+}
+
+function inverseAxis(
+  side: 'start' | 'end' | 'middle',
+  origin: number,
+  length: number,
+  size: number,
+  position: number
+): number {
+  if (side === 'start') return Math.round(position - origin)
+  if (side === 'end') return Math.round(origin + length - size - position)
+  // Axe centré : le milieu peut tomber sur une demi-unité. `placeInArea` arrondit au plus proche
+  // (demi vers le haut) : `floor` garantit que `round(milieu + décalage)` redonne la position.
+  return Math.floor(position - (origin + (length - size) / 2))
+}

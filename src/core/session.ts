@@ -76,4 +76,38 @@ export class SessionStore {
   reset(): void {
     this.session = emptySession()
   }
+
+  /**
+   * Corrige les compteurs à la main (match non détecté, partie jouée hors de l'application…).
+   * Les valeurs fournies remplacent les actuelles ; les autres sont laissées telles quelles.
+   * La meilleure série ne baisse jamais et suit une série corrigée à la hausse. Le dernier
+   * résultat et les GUID comptés ne changent pas. Renvoie `true` si quelque chose a changé.
+   */
+  adjust(values: { wins?: number; losses?: number; streak?: number }): boolean {
+    const { wins, losses, streak } = values
+    if (wins !== undefined && !isCount(wins))
+      throw new Error('Victoires : entier de 0 à 9999 attendu')
+    if (losses !== undefined && !isCount(losses)) {
+      throw new Error('Défaites : entier de 0 à 9999 attendu')
+    }
+    if (streak !== undefined && !(Number.isInteger(streak) && Math.abs(streak) <= MAX_COUNT)) {
+      throw new Error('Série : entier de -9999 à 9999 attendu')
+    }
+
+    const before = JSON.stringify(this.session)
+    const s = this.session
+    if (wins !== undefined) s.wins = wins
+    if (losses !== undefined) s.losses = losses
+    if (streak !== undefined) {
+      s.streak = streak
+      s.bestStreak = Math.max(s.bestStreak, streak)
+    }
+    return JSON.stringify(s) !== before
+  }
+}
+
+const MAX_COUNT = 9999
+
+function isCount(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= MAX_COUNT
 }

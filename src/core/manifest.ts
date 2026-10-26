@@ -47,9 +47,14 @@ const semverSchema = z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0
   error: 'version semver attendue (ex. 1.0.0)'
 })
 
-const colorSchema = z.string().regex(/^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/i, {
+/** Couleur `#rrggbb` ou `#rrggbbaa`. */
+export const COLOR_PATTERN = /^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/i
+
+const colorSchema = z.string().regex(COLOR_PATTERN, {
   error: 'couleur attendue au format #rrggbb ou #rrggbbaa'
 })
+
+const unitSchema = z.string().min(1).max(8, { error: 'unité de 8 caractères au plus' })
 
 // -------------------------------------------------------------------------------------------
 // Les six types de réglages
@@ -82,7 +87,9 @@ const numberSetting = z
     default: z.number(),
     min: z.number().optional(),
     max: z.number().optional(),
-    step: z.number().positive().optional()
+    step: z.number().positive().optional(),
+    /** Unité affichée à côté de la valeur (ex. `px`, `%`). */
+    unit: unitSchema.optional()
   })
   .refine((s) => s.min === undefined || s.max === undefined || s.min <= s.max, {
     error: 'min doit être inférieur ou égal à max',
@@ -103,13 +110,19 @@ const booleanSetting = z.object({
 const colorSetting = z.object({
   ...settingBase,
   type: z.literal('color'),
-  default: colorSchema
+  default: colorSchema,
+  /** Couleurs proposées en un clic ; la valeur reste libre. */
+  palette: z
+    .array(colorSchema)
+    .min(1, { error: 'au moins une couleur attendue' })
+    .max(12, { error: '12 couleurs au plus' })
+    .optional()
 })
 
-const selectSetting = z
+const enumSetting = z
   .object({
     ...settingBase,
-    type: z.literal('select'),
+    type: z.literal('enum'),
     default: z.string(),
     options: z
       .array(
@@ -136,7 +149,8 @@ const rangeSetting = z
     default: z.number(),
     min: z.number(),
     max: z.number(),
-    step: z.number().positive().optional()
+    step: z.number().positive().optional(),
+    unit: unitSchema.optional()
   })
   .refine((s) => s.min <= s.max, {
     error: 'min doit être inférieur ou égal à max',
@@ -152,7 +166,7 @@ const settingSchemas = {
   number: numberSetting,
   boolean: booleanSetting,
   color: colorSetting,
-  select: selectSetting,
+  enum: enumSetting,
   range: rangeSetting
 } as const
 
@@ -161,7 +175,7 @@ const settingSchema = z.discriminatedUnion('type', [
   numberSetting,
   booleanSetting,
   colorSetting,
-  selectSetting,
+  enumSetting,
   rangeSetting
 ])
 
@@ -241,6 +255,38 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+/**
+ * Formes tolérées dans le manifeste, ramenées à la forme canonique avant validation :
+ * - `select` est un alias de `enum` ;
+ * - une option peut s'écrire `"compacte"` au lieu de `{ "value": "compacte", "label": "Compacte" }`
+ *   (le libellé est alors la valeur avec une majuscule).
+ * Le client et les overlays ne voient donc jamais que `enum` et des options `{ value, label }`.
+ */
+function normalizeRaw(raw: unknown): unknown {
+  if (!isRecord(raw) || !Array.isArray(raw.modules)) return raw
+  return {
+    ...raw,
+    modules: raw.modules.map((m: unknown) => {
+      if (!isRecord(m) || !Array.isArray(m.settings)) return m
+      return { ...m, settings: m.settings.map(normalizeSetting) }
+    })
+  }
+}
+
+function normalizeSetting(setting: unknown): unknown {
+  if (!isRecord(setting) || (setting.type !== 'enum' && setting.type !== 'select')) return setting
+  const options = Array.isArray(setting.options)
+    ? setting.options.map((o: unknown) =>
+        typeof o === 'string' ? { value: o, label: capitalize(o) } : o
+      )
+    : setting.options
+  return { ...setting, type: 'enum', options }
+}
+
 /** Clés présentes dans le JSON mais inconnues du format : un avertissement, pas une erreur. */
 function findUnknownKeys(raw: unknown): string[] {
   const found: string[] = []
@@ -270,7 +316,7 @@ function findUnknownKeys(raw: unknown): string[] {
         const schema = settingSchemas[type as keyof typeof settingSchemas]
         check(s, schema.shape, `modules[${i}].settings[${j}]`)
       }
-      // options d'un `select`
+      // options d'un `enum`
       if (isRecord(s) && Array.isArray(s.options)) {
         s.options.forEach((o: unknown, k) =>
           check(o, { value: 0, label: 0 }, `modules[${i}].settings[${j}].options[${k}]`)
@@ -286,7 +332,8 @@ function findUnknownKeys(raw: unknown): string[] {
  * Erreurs en français, avec le chemin du champ fautif. Une clé inconnue donne un avertissement.
  */
 export function parseManifest(raw: unknown): ManifestResult {
-  const result = manifestSchema.safeParse(raw, { error: frenchErrors })
+  const normalized = normalizeRaw(raw)
+  const result = manifestSchema.safeParse(normalized, { error: frenchErrors })
   if (!result.success) {
     const errors = result.error.issues.map((issue) => {
       const path = formatPath(issue.path)
@@ -294,7 +341,7 @@ export function parseManifest(raw: unknown): ManifestResult {
     })
     return { ok: false, errors }
   }
-  const warnings = findUnknownKeys(raw).map((path) => `${path} : clé inconnue (ignorée)`)
+  const warnings = findUnknownKeys(normalized).map((path) => `${path} : clé inconnue (ignorée)`)
   return { ok: true, manifest: result.data, warnings }
 }
 

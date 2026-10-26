@@ -55,18 +55,32 @@ export {
   defaultConfig,
   parseConfig
 } from './config'
-export { diffKeys, placeInArea, scaledSize } from './placement'
+export { resolveSettings, validateSettingValue } from './settings'
+export type { SettingCheck, SettingValue } from './settings'
+export { diffKeys, offsetFromPosition, placeInArea, scaledSize } from './placement'
 export type { Rect, Size } from './placement'
 export type { AppConfig, ModuleConfig } from './config'
-export { IPC_EVENTS, IPC_INVOKE, setModuleEnabledArgs, toPacksSnapshot } from './ipc'
+export {
+  IPC_EVENTS,
+  IPC_INVOKE,
+  adjustSessionArgs,
+  setModuleEnabledArgs,
+  setModulePlacementArgs,
+  setModuleSettingArgs,
+  setPackEnabledArgs,
+  toPacksSnapshot
+} from './ipc'
 export type {
   AppState,
+  DisplayInfo,
   EventMap,
   InvalidPackSummary,
   InvokeMap,
+  ModulePlacementChange,
   ModuleSummary,
   PackSummary,
   PacksSnapshot,
   RlStudioApi,
+  SessionAdjustment,
   Unsubscribe
 } from './ipc'
