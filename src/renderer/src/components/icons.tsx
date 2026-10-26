@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import logo from '../assets/logo.png'
 
 interface IconProps {
   size?: number
@@ -106,28 +107,7 @@ export const WarningIcon = (p: IconProps): React.JSX.Element => (
   </Svg>
 )
 
-/** Logo provisoire : un ballon stylisé sur le bleu du logo. */
+/** Logo de l'application (resources/RL-Studio_logo.png, copié dans assets/). */
 export function LogoMark({ size = 44 }: { size?: number }): React.JSX.Element {
-  return (
-    <div
-      className="flex items-center justify-center rounded-xl bg-[#2a8fd6] text-white"
-      style={{ width: size, height: size }}
-    >
-      <svg
-        width={size * 0.6}
-        height={size * 0.6}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <circle cx="12" cy="12" r="9" />
-        <path d="m12 8 3.5 2.5-1.3 4h-4.4l-1.3-4z" />
-        <path d="M12 3v5M20.5 9.5 15.5 10.5M17.5 19l-3.3-4.5M6.5 19l3.3-4.5M3.5 9.5l5 1" />
-      </svg>
-    </div>
-  )
+  return <img src={logo} width={size} height={size} alt="RL Studio" draggable={false} />
 }
