@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, screen, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/RL-Studio_logo.png?asset'
 import sdkSource from '../server/sdk/rlstudio.js?raw'
+import type { DisplayInfo } from '@core/index'
 import { registerIpc } from './ipc/register'
 import { Services } from './services'
 import { createElectronHost } from './windows/electronHost'
@@ -14,6 +15,14 @@ let disposeIpc: (() => void) | null = null
 let overlayWindows: OverlayWindowManager | null = null
 let quitting = false
 
+/** Écran principal : zone utilisable en pixels logiques, et taille réelle pour l'affichage. */
+function primaryDisplay(): DisplayInfo {
+  const display = screen.getPrimaryDisplay()
+  const width = Math.round(display.size.width * display.scaleFactor)
+  const height = Math.round(display.size.height * display.scaleFactor)
+  return { label: `Principal — ${width} × ${height}`, workArea: display.workArea }
+}
+
 function overlaysDir(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'overlays')
@@ -22,8 +31,10 @@ function overlaysDir(): string {
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1180,
+    height: 780,
+    minWidth: 900,
+    minHeight: 620,
     show: false,
     autoHideMenuBar: true,
     title: 'RL Studio',
@@ -69,7 +80,8 @@ async function start(): Promise<void> {
   const created = new Services({
     configFile: join(app.getPath('userData'), 'config.json'),
     overlaysDir: overlaysDir(),
-    sdkSource
+    sdkSource,
+    getDisplay: primaryDisplay
   })
   services = created
 

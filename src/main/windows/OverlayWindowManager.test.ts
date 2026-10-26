@@ -98,6 +98,7 @@ function module(key: string, over: Partial<ModuleSummary> = {}): ModuleSummary {
     scale: 1,
     data: [],
     settings: [],
+    values: {},
     ...over
   }
 }

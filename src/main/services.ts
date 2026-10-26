@@ -5,13 +5,17 @@ import {
   StatsPipeline,
   parseModuleKey,
   positionSchema,
-  settingDefaults,
+  resolveSettings,
+  validateSettingValue,
   toPacksSnapshot,
   type AppState,
+  type DisplayInfo,
   type ConnectionStatus,
   type PacksSnapshot,
   type Position,
+  type SessionAdjustment,
   type SessionState,
+  type SettingValue,
   type Unsubscribe
 } from '@core/index'
 import { GameConnection, type LinkStatus } from '@game/index'
@@ -23,6 +27,11 @@ export interface ServicesOptions {
   configFile: string
   overlaysDir: string
   sdkSource: string
+  /**
+   * Écran sur lequel les overlays sont placés (fourni par Electron ; sans lui, un écran
+   * 1920 × 1080 fictif, utile aux tests).
+   */
+  getDisplay?: () => DisplayInfo
   overlayPort?: number
   gameWebPort?: number
 }
@@ -38,6 +47,8 @@ export class Services {
   readonly pipeline: StatsPipeline
   readonly connection: GameConnection
   readonly configRecovered: boolean
+  private readonly gamePort: number
+  private readonly getDisplay: (() => DisplayInfo) | undefined
 
   private connectionStatus: ConnectionStatus = 'game-closed'
   private started = false
@@ -46,6 +57,7 @@ export class Services {
   private readonly packChanges = new Emitter<PacksSnapshot>()
 
   constructor(options: ServicesOptions) {
+    this.getDisplay = options.getDisplay
     this.config = new ConfigStore(options.configFile)
     this.configRecovered = this.config.load().recovered
     this.packs = new PackLoader(options.overlaysDir)
@@ -54,7 +66,9 @@ export class Services {
       getPack: (id) => this.packs.getPack(id),
       getSettings: (packId, moduleId) => {
         const module = this.packs.getPack(packId)?.manifest.modules.find((m) => m.id === moduleId)
-        return module ? settingDefaults(module) : {}
+        return module
+          ? resolveSettings(module, this.config.config.modules[`${packId}/${moduleId}`]?.settings)
+          : {}
       }
     }
     this.server = new OverlayServer({
@@ -78,9 +92,8 @@ export class Services {
       { localPlayerId: this.config.config.localPlayerId }
     )
 
-    this.connection = new GameConnection({
-      port: options.gameWebPort ?? this.config.config.gameWebPort
-    })
+    this.gamePort = options.gameWebPort ?? this.config.config.gameWebPort
+    this.connection = new GameConnection({ port: this.gamePort })
     this.connection.onFrame((frame) => this.pipeline.feed(frame.raw))
     this.connection.onStatus((link) => this.setConnectionStatus(toConnectionStatus(link)))
 
@@ -109,6 +122,8 @@ export class Services {
       connection: this.connectionStatus,
       session: this.pipeline.session,
       packs: this.packsSnapshot(),
+      display: this.display(),
+      gamePort: this.gamePort,
       overlayBaseUrl: this.overlayBaseUrl()
     }
   }
@@ -172,6 +187,62 @@ export class Services {
     return this.publishPacks()
   }
 
+  /**
+   * Enregistre la valeur d'un réglage d'un module après l'avoir vérifiée contre le manifeste, puis
+   * l'envoie tout de suite aux overlays ouverts de ce module (sans rechargement de leur page).
+   */
+  async setModuleSetting(
+    key: string,
+    settingKey: string,
+    value: SettingValue
+  ): Promise<PacksSnapshot> {
+    const parsed = parseModuleKey(key)
+    const module = parsed
+      ? this.packs.getPack(parsed.packId)?.manifest.modules.find((m) => m.id === parsed.moduleId)
+      : undefined
+    if (!module) throw new Error(`Module introuvable : ${key}`)
+
+    const def = module.settings.find((s) => s.key === settingKey)
+    if (!def) throw new Error(`Réglage inconnu : ${key} › ${settingKey}`)
+    const check = validateSettingValue(def, value)
+    if (!check.ok) throw new Error(`Valeur refusée pour « ${def.label} » : ${check.error}`)
+
+    await this.config.update((c) => {
+      const current = c.modules[key]
+      c.modules[key] = {
+        ...current,
+        enabled: current?.enabled ?? false,
+        settings: { ...current?.settings, [settingKey]: check.value }
+      }
+    })
+    this.server.publishSettings(
+      key,
+      resolveSettings(module, this.config.config.modules[key]?.settings)
+    )
+    return this.publishPacks()
+  }
+
+  /** Active ou désactive TOUS les modules d'un pack en une seule écriture de config. */
+  async setPackEnabled(packId: string, enabled: boolean): Promise<PacksSnapshot> {
+    const pack = this.packs.getPack(packId)
+    if (!pack) throw new Error(`Pack introuvable : ${packId}`)
+
+    const keys = pack.manifest.modules.map((m) => `${packId}/${m.id}`)
+    await this.config.update((c) => {
+      for (const key of keys) {
+        // Désactiver un module qui n'a jamais été activé ne doit rien écrire.
+        if (enabled || c.modules[key]) c.modules[key] = { ...c.modules[key], enabled }
+      }
+    })
+    return this.publishPacks()
+  }
+
+  /** Corrige les compteurs de la session à la main (boutons − / + du client). */
+  adjustSession(values: SessionAdjustment): SessionState {
+    this.pipeline.adjustSession(values)
+    return this.pipeline.session
+  }
+
   resetSession(): SessionState {
     this.pipeline.resetSession()
     return this.pipeline.session
@@ -187,6 +258,15 @@ export class Services {
 
   onPacks(listener: (packs: PacksSnapshot) => void): Unsubscribe {
     return this.packChanges.on(listener)
+  }
+
+  private display(): DisplayInfo {
+    return (
+      this.getDisplay?.() ?? {
+        label: 'Principal — 1920 × 1080',
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 }
+      }
+    )
   }
 
   private packsSnapshot(): PacksSnapshot {

@@ -19,6 +19,14 @@ const api: RlStudioApi = {
   setModuleEnabled: (moduleKey, enabled) =>
     ipcRenderer.invoke(IPC_INVOKE.setModuleEnabled, moduleKey, enabled),
   resetSession: () => ipcRenderer.invoke(IPC_INVOKE.resetSession),
+  setPackEnabled: (packId, enabled) =>
+    ipcRenderer.invoke(IPC_INVOKE.setPackEnabled, packId, enabled),
+  setModulePlacement: (moduleKey, placement) =>
+    ipcRenderer.invoke(IPC_INVOKE.setModulePlacement, moduleKey, placement),
+  adjustSession: (values) => ipcRenderer.invoke(IPC_INVOKE.adjustSession, values),
+  openOverlaysFolder: () => ipcRenderer.invoke(IPC_INVOKE.openOverlaysFolder),
+  setModuleSetting: (moduleKey, settingKey, value) =>
+    ipcRenderer.invoke(IPC_INVOKE.setModuleSetting, moduleKey, settingKey, value),
   onConnection: (listener) => subscribe(IPC_EVENTS.connection, listener),
   onSession: (listener) => subscribe(IPC_EVENTS.session, listener),
   onPacks: (listener) => subscribe(IPC_EVENTS.packs, listener)

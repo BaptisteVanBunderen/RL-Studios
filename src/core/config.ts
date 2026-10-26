@@ -23,6 +23,8 @@ export interface ModuleConfig {
   position?: Position
   /** Échelle choisie par l'utilisateur ; les proportions du module sont toujours conservées. */
   scale?: number
+  /** Valeurs des réglages déclarés par le module (validées à la lecture, voir `resolveSettings`). */
+  settings?: Record<string, unknown>
 }
 
 export interface AppConfig {
@@ -52,7 +54,8 @@ const baseSchema = z.object({
 const moduleSchema = z.looseObject({
   enabled: z.boolean().catch(false),
   position: positionSchema.optional().catch(undefined),
-  scale: z.number().min(MIN_SCALE).max(MAX_SCALE).optional().catch(undefined)
+  scale: z.number().min(MIN_SCALE).max(MAX_SCALE).optional().catch(undefined),
+  settings: z.record(z.string(), z.unknown()).optional().catch(undefined)
 })
 
 export function defaultConfig(): AppConfig {

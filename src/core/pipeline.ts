@@ -3,6 +3,7 @@ import { MatchTracker, type TrackerOptions } from './MatchTracker'
 import type { MatchState } from './match'
 import { normalize } from './normalize'
 import { isOverlayEvent, type OverlayEvent } from './protocol'
+import type { SessionAdjustment } from './ipc'
 import { SessionStore, type SessionState } from './session'
 
 export interface PipelineHandlers {
@@ -51,6 +52,11 @@ export class StatsPipeline {
     // La session avant l'event : un overlay qui réagit à `matchEnded` y lit déjà le nouveau compteur.
     if (result && this.store.add(result)) this.handlers.onSession?.(this.store.state)
     if (isOverlayEvent(event) && !this.tracker.inHistoryReplay) this.handlers.onEvent?.(event)
+  }
+
+  /** Corrige les compteurs à la main et prévient les abonnés si quelque chose a changé. */
+  adjustSession(values: SessionAdjustment): void {
+    if (this.store.adjust(values)) this.handlers.onSession?.(this.store.state)
   }
 
   /** Remet la session à zéro (action du client) et prévient les abonnés. */

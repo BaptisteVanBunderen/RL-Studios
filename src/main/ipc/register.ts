@@ -1,8 +1,12 @@
-import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { ipcMain, shell, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import {
   IPC_EVENTS,
   IPC_INVOKE,
+  adjustSessionArgs,
   setModuleEnabledArgs,
+  setModulePlacementArgs,
+  setModuleSettingArgs,
+  setPackEnabledArgs,
   type EventMap,
   type InvokeMap
 } from '@core/index'
@@ -41,6 +45,34 @@ export function registerIpc(services: Services, getWindow: () => BrowserWindow |
     const parsed = setModuleEnabledArgs.safeParse(args)
     if (!parsed.success) throw new Error(`Arguments invalides pour ${IPC_INVOKE.setModuleEnabled}`)
     return services.setModuleEnabled(parsed.data[0], parsed.data[1])
+  })
+
+  handle(IPC_INVOKE.setPackEnabled, (...args) => {
+    const parsed = setPackEnabledArgs.safeParse(args)
+    if (!parsed.success) throw new Error(`Arguments invalides pour ${IPC_INVOKE.setPackEnabled}`)
+    return services.setPackEnabled(parsed.data[0], parsed.data[1])
+  })
+  handle(IPC_INVOKE.setModulePlacement, (...args) => {
+    const parsed = setModulePlacementArgs.safeParse(args)
+    if (!parsed.success) {
+      throw new Error(`Arguments invalides pour ${IPC_INVOKE.setModulePlacement}`)
+    }
+    return services.setModulePlacement(parsed.data[0], parsed.data[1])
+  })
+  handle(IPC_INVOKE.adjustSession, (...args) => {
+    const parsed = adjustSessionArgs.safeParse(args)
+    if (!parsed.success) throw new Error(`Arguments invalides pour ${IPC_INVOKE.adjustSession}`)
+    return services.adjustSession(parsed.data[0])
+  })
+  handle(IPC_INVOKE.setModuleSetting, (...args) => {
+    const parsed = setModuleSettingArgs.safeParse(args)
+    if (!parsed.success) throw new Error(`Arguments invalides pour ${IPC_INVOKE.setModuleSetting}`)
+    return services.setModuleSetting(parsed.data[0], parsed.data[1], parsed.data[2])
+  })
+  handle(IPC_INVOKE.openOverlaysFolder, async () => {
+    // `openPath` renvoie un message d'erreur, ou une chaîne vide si tout va bien.
+    const error = await shell.openPath(services.packs.dir)
+    if (error) throw new Error(`Impossible d'ouvrir le dossier des overlays : ${error}`)
   })
 
   const push = <K extends keyof EventMap>(channel: K, payload: EventMap[K]): void => {

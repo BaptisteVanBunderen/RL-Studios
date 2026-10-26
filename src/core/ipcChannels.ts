@@ -8,7 +8,12 @@ export const IPC_INVOKE = {
   getState: 'app:get-state',
   reloadPacks: 'packs:reload',
   setModuleEnabled: 'modules:set-enabled',
-  resetSession: 'session:reset'
+  resetSession: 'session:reset',
+  setPackEnabled: 'packs:set-enabled',
+  setModulePlacement: 'modules:set-placement',
+  adjustSession: 'session:adjust',
+  openOverlaysFolder: 'shell:open-overlays-folder',
+  setModuleSetting: 'modules:set-setting'
 } as const
 
 /** Main → client : notifications (`webContents.send`). */

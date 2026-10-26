@@ -181,16 +181,23 @@ docs/            architecture, constats API, guide de création d'overlay (P7)
 
 ### Les six types de réglages (P4)
 
-| type      | champs                               | valeur           |
-| --------- | ------------------------------------ | ---------------- |
-| `text`    | `default`, `maxLength?`              | string           |
-| `number`  | `default`, `min?`, `max?`, `step?`   | number           |
-| `boolean` | `default`                            | boolean          |
-| `color`   | `default` (`#rrggbb` ou `#rrggbbaa`) | string           |
-| `select`  | `default`, `options[{value,label}]`  | une des `value`  |
-| `range`   | `default`, `min`, `max`, `step?`     | number (curseur) |
+| type      | champs                                           | valeur                            |
+| --------- | ------------------------------------------------ | --------------------------------- |
+| `text`    | `default`, `maxLength?`                          | string                            |
+| `number`  | `default`, `min?`, `max?`, `step?`, `unit?`      | number (compteur − / +)           |
+| `boolean` | `default`                                        | boolean (interrupteur)            |
+| `color`   | `default` (`#rrggbb` ou `#rrggbbaa`), `palette?` | string (pastilles + valeur libre) |
+| `enum`    | `default`, `options`                             | une des valeurs                   |
+| `range`   | `default`, `min`, `max`, `step?`, `unit?`        | number (curseur)                  |
 
-Communs : `key` (unique dans le module), `label`, `description?`. Une valeur sauvegardée invalide (manifeste modifié depuis) est remplacée par le `default`.
+Communs : `key` (unique dans le module), `label`, `description?`.
+
+- `enum` : `select` reste accepté comme alias et ressort sous le nom `enum`. Une option s'écrit `"compacte"` ou `{ "value": "compacte", "label": "Compacte" }` ; une chaîne devient `{ value, label }` avec une majuscule au libellé. Le client et les overlays ne voient que la forme canonique. Le client affiche des boutons exclusifs pour 2 à 4 options, une liste déroulante au-delà.
+- `palette` (couleur) : 1 à 12 couleurs proposées en un clic ; la valeur reste libre et le défaut n'a pas à en faire partie. Sans palette, le client en propose quatre.
+- `unit` (nombre, curseur) : 8 caractères au plus. Un curseur 0–1 avec `"unit": "%"` est affiché en pourcentage.
+- Valeurs de l'utilisateur : `config.modules[<pack>/<module>].settings`. À l'enregistrement (`services.setModuleSetting`) la valeur est validée contre la définition (type, bornes, `maxLength`, couleur, options) ; refusée avec un message français sinon. À la lecture (`resolveSettings`, `src/core/settings.ts`) une valeur devenue invalide (manifeste modifié depuis) est remplacée par le `default`, un réglage ajouté reçoit son défaut, un réglage supprimé est ignoré.
+- Mise à jour à chaud : `setModuleSetting` envoie les valeurs effectives aux overlays ouverts de ce module (`server.publishSettings`), sans rechargement de leur page ; un overlay qui se connecte ensuite reçoit les valeurs enregistrées.
+- **Pas d'héritage pack → module en v1** : pas de réglages communs à un pack, pas de « hérité du pack ». La maquette le montre ; c'est hors périmètre (voir `CLAUDE.md`).
 
 ### Changements par rapport au manifeste de la première version
 
@@ -250,8 +257,22 @@ Pas de commandes depuis un overlay en v1 : le reset de session passe dans le cli
 - Fermer la fenêtre du client quitte l'application (les overlays en dépendent). Port pris au démarrage : boîte de dialogue qui indique le port et le fichier de config où le changer.
 - Config (`ConfigStore`, `<userData>/config.json`) : ports du serveur d'overlays (49200) et de l'API (49124), `localPlayerId` (mémorisé dès que `Game.Target` le désigne), `modules[<pack>/<module>].enabled`. Fichier absent → défauts ; invalide champ par champ → ce champ redevient son défaut sans perdre les autres ; JSON illisible → défauts et copie du fichier en `.bak` (le client prévient) ; clés inconnues conservées ; écritures atomiques (fichier temporaire puis renommage) et sérialisées.
 - Les valeurs par défaut des ports sont codées dans `src/core/config.ts` ET dans `GameConnection` : un test les compare.
-- IPC typé (`src/core/ipc.ts`, canaux dans `ipcChannels.ts`, sans import pour que le preload puisse l'utiliser) : requêtes `app:get-state`, `packs:reload`, `modules:set-enabled`, `session:reset` ; notifications `app:connection`, `app:session`, `app:packs`. Le preload n'expose que `window.rlstudio` (jamais `ipcRenderer`) ; la fenêtre du client est en `contextIsolation` et `sandbox`. Le main vérifie que l'appel vient de la fenêtre du client et revalide les arguments (zod). Rien de ce qui traverse l'IPC ne contient de chemin absolu.
+- IPC typé (`src/core/ipc.ts`, canaux dans `ipcChannels.ts`, sans import pour que le preload puisse l'utiliser) : requêtes `app:get-state`, `packs:reload`, `packs:set-enabled` (tous les modules d'un pack en une écriture), `modules:set-enabled`, `modules:set-placement` (position et/ou échelle, `null` = rétablir), `modules:set-setting`, `session:adjust` (corriger victoires, défaites, série), `session:reset`, `shell:open-overlays-folder` ; notifications `app:connection`, `app:session`, `app:packs`. Le preload n'expose que `window.rlstudio` (jamais `ipcRenderer`) ; la fenêtre du client est en `contextIsolation` et `sandbox`. Le main vérifie que l'appel vient de la fenêtre du client et revalide les arguments (zod). Rien de ce qui traverse l'IPC ne contient de chemin absolu.
+- `AppState` contient aussi `display` (écran principal : zone utilisable en pixels logiques et libellé, ex. « Principal — 2560 × 1440 ») et `gamePort`. Chaque `ModuleSummary` porte `position` et `defaultPosition` (ancre + décalage), `scale` et `values` (valeurs effectives des réglages).
 - Activer un module (`modules:set-enabled`) mémorise le choix et notifie `app:packs` ; `OverlayWindowManager` s'abonne à `services.onPacks` (voir la section suivante) et ouvre ou ferme la fenêtre.
+
+### Client React (`src/renderer/`)
+
+Interface de la maquette (direction A : fond sombre, bleu = victoires et états sains, orange = actions et série). Le client ne parle au processus principal que par `window.rlstudio`.
+
+- Navigation par un simple état (`View` : bibliothèque, pack, module, réglages du jeu), sans routeur. Contexte `AppContext` : l'état de l'application, `go`, `report` ; toute action passe par `useAction`, qui montre l'erreur à l'utilisateur (jamais avalée en silence).
+- **Bibliothèque** : cartes de packs ; l'interrupteur d'une carte active ou désactive TOUS les modules du pack (allumé = au moins un module actif ; un clic éteint tout, ou allume tout si rien n'est actif) ; carte « Ajouter un overlay » (ouvre le dossier) ; barre de session (victoires, défaites réglables à la main, remise à zéro) ; pastille de connexion.
+- **Pack** : un module par ligne, interrupteur par module ; « Tout activer / Tout désactiver ».
+- **Module** : aperçu en direct, position (X, Y), échelle, réglages, session. L'aperçu est la VRAIE page de l'overlay dans une `iframe` (`sandbox="allow-scripts allow-same-origin"`, origine du serveur local, `color-scheme: normal` pour garder le fond transparent) : mêmes données, mêmes réglages, mise à jour à chaud comprise. Elle compte comme un client WebSocket de plus.
+- X et Y affichés sont la position réelle de la fenêtre (`placeInArea`) ; on mémorise toujours ancre + décalage : modifier X ou Y recalcule le décalage depuis la même ancre (`offsetFromPosition`, inverse exact de `placeInArea`, y compris sur les axes centrés dont le milieu tombe sur une demi-unité).
+- Sécurité du client : la politique de contenu n'autorise que `127.0.0.1` (iframe d'aperçu et images d'aperçu des packs), aucune autre connexion réseau.
+- Polices : Archivo / IBM Plex de la maquette pas encore embarquées, repli sur des polices système (à remplacer à la fin, sans impact sur le reste).
+- Pas encore fait : « Placer à la souris » (bouton désactivé), choix de l'écran (un seul : le principal), réglages du jeu au-delà du statut (installation, ini, raccourci : P5).
 
 ## Fenêtres d'overlay (P2/P3)
 
