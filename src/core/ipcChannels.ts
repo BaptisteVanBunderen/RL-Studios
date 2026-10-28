@@ -13,12 +13,27 @@ export const IPC_INVOKE = {
   setModulePlacement: 'modules:set-placement',
   adjustSession: 'session:adjust',
   openOverlaysFolder: 'shell:open-overlays-folder',
-  setModuleSetting: 'modules:set-setting'
+  setModuleSetting: 'modules:set-setting',
+  getGameSetup: 'game:get-setup',
+  detectGame: 'game:detect',
+  setGameDir: 'game:set-dir',
+  pickGameDir: 'game:pick-dir',
+  configureStatsApi: 'game:configure-api',
+  restoreStatsApi: 'game:restore-api',
+  restartGame: 'game:restart',
+  setGameHud: 'game:set-hud',
+  setDisplay: 'overlays:set-display',
+  setOverlaysVisible: 'overlays:set-visible',
+  setShortcut: 'overlays:set-shortcut',
+  startEditMode: 'overlays:start-edit',
+  stopEditMode: 'overlays:stop-edit'
 } as const
 
 /** Main → client : notifications (`webContents.send`). */
 export const IPC_EVENTS = {
   connection: 'app:connection',
   session: 'app:session',
-  packs: 'app:packs'
+  packs: 'app:packs',
+  display: 'app:display',
+  overlays: 'app:overlays'
 } as const

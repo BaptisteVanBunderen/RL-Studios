@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isValidAccelerator } from './accelerator'
 import { positionSchema, type Position } from './manifest'
 import { isModuleKey } from './packs'
 
@@ -8,6 +9,8 @@ import { isModuleKey } from './packs'
  */
 export const DEFAULT_OVERLAY_PORT = 49200
 export const DEFAULT_GAME_PORT = 49124
+
+export const DEFAULT_SHORTCUT = 'Ctrl+Shift+F9'
 
 /** Bornes de l'échelle d'un overlay (1 = taille de référence du manifeste). */
 export const MIN_SCALE = 0.25
@@ -35,6 +38,12 @@ export interface AppConfig {
   gameWebPort: number
   /** `PrimaryId` du joueur local, mémorisé après l'avoir vu désigné par `Game.Target`. */
   localPlayerId: string | null
+  /** Dossier d'installation de Rocket League choisi (détecté ou saisi à la main). */
+  gameDir: string | null
+  /** Écran des overlays (`id` d'Electron) ; `null` = écran principal. */
+  displayId: number | null
+  /** Raccourci global pour afficher / masquer les overlays (format Electron) ; `null` = aucun. */
+  shortcut: string | null
   /** Par clé de module `<pack>/<module>`. */
   modules: Record<string, ModuleConfig>
 }
@@ -47,7 +56,10 @@ const baseSchema = z.object({
   version: z.number().int().catch(1),
   overlayPort: port(DEFAULT_OVERLAY_PORT),
   gameWebPort: port(DEFAULT_GAME_PORT),
-  localPlayerId: z.string().min(1).nullable().catch(null)
+  localPlayerId: z.string().min(1).nullable().catch(null),
+  gameDir: z.string().min(1).max(1024).nullable().catch(null),
+  displayId: z.number().int().nullable().catch(null),
+  shortcut: z.string().refine(isValidAccelerator).nullable().catch(DEFAULT_SHORTCUT)
 })
 
 // Un champ invalide est simplement ignoré (retour au défaut), sans perdre le reste du module.
@@ -64,6 +76,9 @@ export function defaultConfig(): AppConfig {
     overlayPort: DEFAULT_OVERLAY_PORT,
     gameWebPort: DEFAULT_GAME_PORT,
     localPlayerId: null,
+    gameDir: null,
+    displayId: null,
+    shortcut: DEFAULT_SHORTCUT,
     modules: {}
   }
 }

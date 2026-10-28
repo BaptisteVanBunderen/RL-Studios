@@ -20,6 +20,9 @@ describe('parseConfig', () => {
       overlayPort: 50000,
       gameWebPort: 49999,
       localPlayerId: 'Epic|abc|0',
+      gameDir: 'D:/Jeux/rocketleague',
+      displayId: 2,
+      shortcut: 'Alt+O',
       modules: { 'session-tracker/bar': { enabled: true } }
     }
     expect(parseConfig(raw)).toEqual(raw)

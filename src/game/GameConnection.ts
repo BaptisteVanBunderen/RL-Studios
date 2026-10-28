@@ -1,4 +1,4 @@
-import type { RawFrame } from '@core/index'
+import { buildCommandMessage, type GameCommand, type RawFrame } from '@core/index'
 import WebSocket from 'ws'
 import type { FrameListener, FrameSource, Unsubscribe } from './FrameSource'
 
@@ -77,6 +77,14 @@ export class GameConnection implements FrameSource {
       socket.terminate()
     }
     this.setStatus('disconnected')
+  }
+
+  /** Envoie une commande au jeu ; `false` si la connexion n'est pas ouverte. */
+  send(command: GameCommand): boolean {
+    const socket = this.socket
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false
+    socket.send(buildCommandMessage(command))
+    return true
   }
 
   private connect(): void {

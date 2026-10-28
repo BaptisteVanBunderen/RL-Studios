@@ -1,26 +1,34 @@
-import { app, BrowserWindow, dialog, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, screen, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/RL-Studio_logo.png?asset'
 import sdkSource from '../server/sdk/rlstudio.js?raw'
 import type { DisplayInfo } from '@core/index'
+import { createGameHost } from '@game/index'
 import { registerIpc } from './ipc/register'
 import { Services } from './services'
 import { createElectronHost } from './windows/electronHost'
 import { OverlayWindowManager } from './windows/OverlayWindowManager'
+import { createEditWindow } from './windows/editWindow'
+import { loadClientPage } from './windows/clientPage'
 
 let mainWindow: BrowserWindow | null = null
 let services: Services | null = null
 let disposeIpc: (() => void) | null = null
 let overlayWindows: OverlayWindowManager | null = null
+let editWindow: BrowserWindow | null = null
 let quitting = false
 
-/** Écran principal : zone utilisable en pixels logiques, et taille réelle pour l'affichage. */
-function primaryDisplay(): DisplayInfo {
-  const display = screen.getPrimaryDisplay()
-  const width = Math.round(display.size.width * display.scaleFactor)
-  const height = Math.round(display.size.height * display.scaleFactor)
-  return { label: `Principal — ${width} × ${height}`, workArea: display.workArea }
+/** Écrans branchés, l'écran principal en premier : zone utilisable (pixels logiques) et taille réelle. */
+function allDisplays(): DisplayInfo[] {
+  const primary = screen.getPrimaryDisplay()
+  const others = screen.getAllDisplays().filter((d) => d.id !== primary.id)
+  return [primary, ...others].map((display, index) => {
+    const width = Math.round(display.size.width * display.scaleFactor)
+    const height = Math.round(display.size.height * display.scaleFactor)
+    const name = index === 0 ? 'Principal' : `Écran ${index + 1}`
+    return { id: display.id, label: `${name} — ${width} × ${height}`, workArea: display.workArea }
+  })
 }
 
 function overlaysDir(): string {
@@ -65,12 +73,50 @@ function createWindow(): BrowserWindow {
     if (!url.startsWith(ownPages)) event.preventDefault()
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    void window.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    void window.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  loadClientPage(window)
   return window
+}
+
+function startEdit(): void {
+  if (editWindow && !editWindow.isDestroyed()) {
+    editWindow.focus()
+    return
+  }
+  if (!services) return
+  const window = createEditWindow(services.getState().display.workArea, icon)
+  editWindow = window
+  window.on('closed', () => {
+    if (editWindow === window) editWindow = null
+  })
+}
+
+function stopEdit(): void {
+  if (editWindow && !editWindow.isDestroyed()) editWindow.close()
+}
+
+/**
+ * Raccourci global d'affichage des overlays. Le système peut le refuser (déjà pris par une autre
+ * application) : l'état est renvoyé au client, qui l'affiche.
+ */
+function bindShortcut(created: Services): void {
+  let registered: string | null | undefined
+  const apply = (): void => {
+    const wanted = created.getState().overlays.shortcut
+    if (wanted === registered) return
+    globalShortcut.unregisterAll()
+    registered = wanted
+    let ok = false
+    if (wanted) {
+      try {
+        ok = globalShortcut.register(wanted, () => created.toggleOverlays())
+      } catch {
+        ok = false
+      }
+    }
+    created.reportShortcutActive(ok)
+  }
+  apply()
+  created.onOverlays(apply)
 }
 
 async function start(): Promise<void> {
@@ -81,7 +127,8 @@ async function start(): Promise<void> {
     configFile: join(app.getPath('userData'), 'config.json'),
     overlaysDir: overlaysDir(),
     sdkSource,
-    getDisplay: primaryDisplay
+    getDisplays: allDisplays,
+    gameHost: createGameHost({ openExternal: (url) => shell.openExternal(url) })
   })
   services = created
 
@@ -106,13 +153,28 @@ async function start(): Promise<void> {
     })
   }
 
-  disposeIpc = registerIpc(created, () => mainWindow)
+  disposeIpc = registerIpc(created, {
+    mainWindow: () => mainWindow,
+    clientWindows: () =>
+      [mainWindow, editWindow].filter((w): w is BrowserWindow => w !== null && !w.isDestroyed()),
+    startEdit,
+    stopEdit
+  })
 
   // Une fenêtre d'overlay par module activé, mise à jour à chaque changement des packs.
-  const windows = new OverlayWindowManager(createElectronHost(), () => created.overlayBaseUrl())
+  const windows = new OverlayWindowManager(
+    createElectronHost(() => created.getState().display.workArea),
+    () => created.overlayBaseUrl()
+  )
   overlayWindows = windows
   windows.sync(created.getState().packs)
   created.onPacks((packs) => windows.sync(packs))
+  created.onOverlays((settings) => windows.setVisible(settings.visible))
+  const refreshDisplays = (): void => void created.refreshDisplays()
+  screen.on('display-added', refreshDisplays)
+  screen.on('display-removed', refreshDisplays)
+  screen.on('display-metrics-changed', refreshDisplays)
+  bindShortcut(created)
 
   mainWindow = createWindow()
 }
@@ -134,6 +196,8 @@ if (!app.requestSingleInstanceLock()) {
     console.error('RL Studio : démarrage impossible', error)
     app.exit(1)
   })
+
+  app.on('will-quit', () => globalShortcut.unregisterAll())
 
   app.on('before-quit', (event) => {
     if (quitting || !services) return
