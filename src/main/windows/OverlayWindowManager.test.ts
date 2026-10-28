@@ -34,6 +34,11 @@ class FakeWindow implements OverlayWindow {
     this.scale = scale
     this.log.push('setScale')
   }
+  visible = true
+  setVisible(visible: boolean): void {
+    this.visible = visible
+    this.log.push(visible ? 'show' : 'hide')
+  }
   close(): void {
     this.closed = true
     this.closedListeners.forEach((l) => l()) // Electron émet « closed » à la fermeture
@@ -59,8 +64,14 @@ class FakeHost implements WindowHost {
   area: Rect = { x: 0, y: 0, width: 1920, height: 1080 }
   private listeners = new Set<() => void>()
 
-  createOverlayWindow(options: { key: string; bounds: Rect; scale: number }): FakeWindow {
+  createOverlayWindow(options: {
+    key: string
+    bounds: Rect
+    scale: number
+    visible: boolean
+  }): FakeWindow {
     const window = new FakeWindow(options.key, options.bounds, options.scale)
+    window.visible = options.visible
     this.windows.push(window)
     return window
   }
@@ -224,6 +235,22 @@ describe('OverlayWindowManager', () => {
       expect(w.bounds).toMatchObject({ x: 100, y: 200 })
       expect(w.log).toEqual(['setBounds'])
       expect(host.windows).toHaveLength(1) // même fenêtre, pas de réouverture
+    })
+
+    it('masque et réaffiche les fenêtres sans les fermer, y compris celles ouvertes ensuite', () => {
+      create()
+      manager.sync(snapshot(module('p/a')))
+      manager.setVisible(false)
+      const a = host.alive('p/a')!
+      expect(a.visible).toBe(false)
+
+      manager.sync(snapshot(module('p/a'), module('p/b')))
+      expect(host.alive('p/b')?.visible).toBe(false) // ouverte pendant que tout est masqué
+
+      manager.setVisible(true)
+      expect(a.visible).toBe(true)
+      expect(host.alive('p/b')?.visible).toBe(true)
+      expect(host.windows).toHaveLength(2) // rien n'a été rouvert
     })
 
     it('change l’échelle d’une fenêtre ouverte : taille et zoom', () => {

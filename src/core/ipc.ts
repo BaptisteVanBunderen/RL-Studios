@@ -5,6 +5,8 @@ import type { ManifestTopic, Position, SettingDefinition } from './manifest'
 import { ID_PATTERN, positionSchema } from './manifest'
 import { isModuleKey, moduleKey, type PackScan } from './packs'
 import type { Rect } from './placement'
+import { isValidAccelerator } from './accelerator'
+import { isValidPacketSendRate, type GameSetupInfo } from './gameSetup'
 import type { ConnectionStatus } from './protocol'
 import type { SessionState } from './session'
 import { resolveSettings, type SettingValue } from './settings'
@@ -59,12 +61,29 @@ export interface PacksSnapshot {
   invalid: InvalidPackSummary[]
 }
 
-/** Écran sur lequel les overlays sont placés (écran principal pour l'instant). */
+/** Un écran, tel que proposé dans le choix de l'écran des overlays. */
 export interface DisplayInfo {
+  /** Identifiant d'Electron ; stable tant que l'écran reste branché. */
+  id: number
   /** Texte affiché, ex. « Principal — 2560 × 1440 ». */
   label: string
   /** Zone utilisable (hors barre des tâches), en pixels logiques. */
   workArea: Rect
+}
+
+/** Écrans disponibles et celui où s'affichent les overlays. */
+export interface DisplayState {
+  display: DisplayInfo
+  displays: DisplayInfo[]
+}
+
+/** Affichage global des overlays : interrupteur (raccourci) et état du raccourci. */
+export interface OverlaySettings {
+  visible: boolean
+  /** Raccourci demandé (format Electron) ; `null` = aucun. */
+  shortcut: string | null
+  /** `false` si le système a refusé le raccourci (déjà pris par une autre application). */
+  shortcutActive: boolean
 }
 
 export interface AppState {
@@ -72,6 +91,8 @@ export interface AppState {
   session: SessionState
   packs: PacksSnapshot
   display: DisplayInfo
+  displays: DisplayInfo[]
+  overlays: OverlaySettings
   /** Port WebSocket de l'API du jeu auquel l'application se connecte (127.0.0.1). */
   gamePort: number
   /** `http://127.0.0.1:<port>` : base des URL d'overlay (« Copier l'URL OBS »). */
@@ -131,6 +152,23 @@ export interface InvokeMap {
     args: [moduleKey: string, settingKey: string, value: SettingValue]
     result: PacksSnapshot
   }
+  [IPC_INVOKE.getGameSetup]: { args: []; result: GameSetupInfo }
+  [IPC_INVOKE.detectGame]: { args: []; result: GameSetupInfo }
+  [IPC_INVOKE.setGameDir]: { args: [dir: string | null]; result: GameSetupInfo }
+  /** Ouvre le sélecteur de dossier ; `null` si l'utilisateur annule. */
+  [IPC_INVOKE.pickGameDir]: { args: []; result: GameSetupInfo | null }
+  [IPC_INVOKE.configureStatsApi]: { args: [packetSendRate: number]; result: GameSetupInfo }
+  [IPC_INVOKE.restoreStatsApi]: { args: []; result: GameSetupInfo }
+  /** Ferme le jeu s'il tourne, puis le relance. */
+  [IPC_INVOKE.restartGame]: { args: []; result: void }
+  [IPC_INVOKE.setGameHud]: { args: [visible: boolean]; result: void }
+  /** `null` = écran principal. */
+  [IPC_INVOKE.setDisplay]: { args: [displayId: number | null]; result: DisplayState }
+  [IPC_INVOKE.setOverlaysVisible]: { args: [visible: boolean]; result: OverlaySettings }
+  [IPC_INVOKE.setShortcut]: { args: [shortcut: string | null]; result: OverlaySettings }
+  /** Ouvre la couche de placement à la souris par-dessus l'écran des overlays. */
+  [IPC_INVOKE.startEditMode]: { args: []; result: void }
+  [IPC_INVOKE.stopEditMode]: { args: []; result: void }
 }
 
 /** `null` rétablit la valeur du manifeste (position) ou 1 (échelle) ; absent = inchangé. */
@@ -151,6 +189,8 @@ export interface EventMap {
   [IPC_EVENTS.connection]: ConnectionStatus
   [IPC_EVENTS.session]: SessionState
   [IPC_EVENTS.packs]: PacksSnapshot
+  [IPC_EVENTS.display]: DisplayState
+  [IPC_EVENTS.overlays]: OverlaySettings
 }
 
 export type Unsubscribe = () => void
@@ -170,9 +210,24 @@ export interface RlStudioApi {
     settingKey: string,
     value: SettingValue
   ): Promise<PacksSnapshot>
+  getGameSetup(): Promise<GameSetupInfo>
+  detectGame(): Promise<GameSetupInfo>
+  setGameDir(dir: string | null): Promise<GameSetupInfo>
+  pickGameDir(): Promise<GameSetupInfo | null>
+  configureStatsApi(packetSendRate: number): Promise<GameSetupInfo>
+  restoreStatsApi(): Promise<GameSetupInfo>
+  restartGame(): Promise<void>
+  setGameHud(visible: boolean): Promise<void>
+  setDisplay(displayId: number | null): Promise<DisplayState>
+  setOverlaysVisible(visible: boolean): Promise<OverlaySettings>
+  setShortcut(shortcut: string | null): Promise<OverlaySettings>
+  startEditMode(): Promise<void>
+  stopEditMode(): Promise<void>
   onConnection(listener: (status: ConnectionStatus) => void): Unsubscribe
   onSession(listener: (session: SessionState) => void): Unsubscribe
   onPacks(listener: (packs: PacksSnapshot) => void): Unsubscribe
+  onDisplay(listener: (state: DisplayState) => void): Unsubscribe
+  onOverlays(listener: (settings: OverlaySettings) => void): Unsubscribe
 }
 
 /**
@@ -211,4 +266,24 @@ export const setModuleSettingArgs = z.tuple([
   z.string().min(1).max(64),
   // la valeur est vérifiée contre la définition du manifeste par Services.setModuleSetting
   z.union([z.boolean(), z.number(), z.string().max(1000)])
+])
+
+export const setGameDirArgs = z.tuple([z.string().min(1).max(1024).nullable()])
+
+export const configureStatsApiArgs = z.tuple([
+  z.number().refine(isValidPacketSendRate, { error: 'paquets par seconde : entier de 0 à 120' })
+])
+
+export const setGameHudArgs = z.tuple([z.boolean()])
+
+export const setDisplayArgs = z.tuple([z.number().int().nullable()])
+
+export const setOverlaysVisibleArgs = z.tuple([z.boolean()])
+
+export const setShortcutArgs = z.tuple([
+  z
+    .string()
+    .max(40)
+    .refine(isValidAccelerator, { error: 'raccourci invalide (ex. Ctrl+Shift+F9)' })
+    .nullable()
 ])

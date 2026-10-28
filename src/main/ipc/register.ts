@@ -1,8 +1,14 @@
-import { ipcMain, shell, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { dialog, ipcMain, shell, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import {
   IPC_EVENTS,
   IPC_INVOKE,
   adjustSessionArgs,
+  configureStatsApiArgs,
+  setDisplayArgs,
+  setOverlaysVisibleArgs,
+  setShortcutArgs,
+  setGameDirArgs,
+  setGameHudArgs,
   setModuleEnabledArgs,
   setModulePlacementArgs,
   setModuleSettingArgs,
@@ -12,6 +18,15 @@ import {
 } from '@core/index'
 import type { Services } from '../services'
 
+/** Ce que le branchement IPC demande à l'application Electron (fenêtres, mode édition). */
+export interface IpcHost {
+  mainWindow(): BrowserWindow | null
+  /** Fenêtres autorisées à appeler le main : le client et la couche de placement. */
+  clientWindows(): BrowserWindow[]
+  startEdit(): void
+  stopEdit(): void
+}
+
 type Result<K extends keyof InvokeMap> = InvokeMap[K]['result']
 
 /**
@@ -19,11 +34,12 @@ type Result<K extends keyof InvokeMap> = InvokeMap[K]['result']
  * notifications du main vers le client. Les types viennent de `src/core/ipc.ts`.
  * Renvoie une fonction qui retire tout (arrêt de l'application).
  */
-export function registerIpc(services: Services, getWindow: () => BrowserWindow | null): () => void {
-  // Seule la fenêtre du client peut appeler : les fenêtres d'overlay n'ont ni preload ni accès IPC.
+export function registerIpc(services: Services, host: IpcHost): () => void {
+  const getWindow = host.mainWindow
+  // Seules les fenêtres du client (principale et couche de placement) peuvent appeler : les
+  // fenêtres d'overlay n'ont ni preload ni accès IPC.
   const assertFromClient = (event: IpcMainInvokeEvent): void => {
-    const window = getWindow()
-    if (!window || event.sender !== window.webContents) {
+    if (!host.clientWindows().some((w) => !w.isDestroyed() && event.sender === w.webContents)) {
       throw new Error('Appel IPC refusé : expéditeur inconnu')
     }
   }
@@ -75,14 +91,68 @@ export function registerIpc(services: Services, getWindow: () => BrowserWindow |
     if (error) throw new Error(`Impossible d'ouvrir le dossier des overlays : ${error}`)
   })
 
-  const push = <K extends keyof EventMap>(channel: K, payload: EventMap[K]): void => {
+  const parse = <T>(
+    schema: { safeParse: (v: unknown) => { success: boolean; data?: T } },
+    args: unknown[],
+    channel: string
+  ): T => {
+    const parsed = schema.safeParse(args)
+    if (!parsed.success) throw new Error(`Arguments invalides pour ${channel}`)
+    return parsed.data as T
+  }
+  handle(IPC_INVOKE.getGameSetup, () => services.getGameSetup())
+  handle(IPC_INVOKE.detectGame, () => services.detectGame())
+  handle(IPC_INVOKE.setGameDir, (...args) =>
+    services.setGameDir(parse(setGameDirArgs, args, IPC_INVOKE.setGameDir)[0])
+  )
+  handle(IPC_INVOKE.pickGameDir, async () => {
     const window = getWindow()
-    if (window && !window.isDestroyed()) window.webContents.send(channel, payload)
+    const options = {
+      title: 'Choisir le dossier de Rocket League',
+      properties: ['openDirectory' as const]
+    }
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options)
+    return result.canceled || !result.filePaths[0] ? null : services.setGameDir(result.filePaths[0])
+  })
+  handle(IPC_INVOKE.configureStatsApi, (...args) =>
+    services.configureStatsApi(parse(configureStatsApiArgs, args, IPC_INVOKE.configureStatsApi)[0])
+  )
+  handle(IPC_INVOKE.restoreStatsApi, () => services.restoreStatsApi())
+  handle(IPC_INVOKE.restartGame, () => services.restartGame())
+  handle(IPC_INVOKE.setGameHud, (...args) =>
+    services.setGameHud(parse(setGameHudArgs, args, IPC_INVOKE.setGameHud)[0])
+  )
+
+  handle(IPC_INVOKE.setDisplay, (...args) =>
+    services.setDisplay(parse(setDisplayArgs, args, IPC_INVOKE.setDisplay)[0])
+  )
+  handle(IPC_INVOKE.setOverlaysVisible, (...args) =>
+    services.setOverlaysVisible(
+      parse(setOverlaysVisibleArgs, args, IPC_INVOKE.setOverlaysVisible)[0]
+    )
+  )
+  handle(IPC_INVOKE.setShortcut, (...args) =>
+    services.setShortcut(parse(setShortcutArgs, args, IPC_INVOKE.setShortcut)[0])
+  )
+  handle(IPC_INVOKE.startEditMode, () => {
+    services.setOverlaysVisible(true) // on place des overlays qu'on voit
+    host.startEdit()
+  })
+  handle(IPC_INVOKE.stopEditMode, () => host.stopEdit())
+
+  const push = <K extends keyof EventMap>(channel: K, payload: EventMap[K]): void => {
+    for (const window of host.clientWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(channel, payload)
+    }
   }
   const unsubscribes = [
     services.onConnection((status) => push(IPC_EVENTS.connection, status)),
     services.onSession((session) => push(IPC_EVENTS.session, session)),
-    services.onPacks((packs) => push(IPC_EVENTS.packs, packs))
+    services.onPacks((packs) => push(IPC_EVENTS.packs, packs)),
+    services.onDisplay((state) => push(IPC_EVENTS.display, state)),
+    services.onOverlays((settings) => push(IPC_EVENTS.overlays, settings))
   ]
 
   return () => {

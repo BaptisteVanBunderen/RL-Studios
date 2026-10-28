@@ -55,18 +55,20 @@ Conséquences :
 - `StatsPipeline` (`src/core/pipeline.ts`) relie `normalize` → `createCrossbarDedupe` → `MatchTracker` → `SessionStore` et notifie par callbacks (`onMatch`, `onSession`, `onEvent`). Pure, indépendante de la source et du serveur : c'est le processus principal qui branche `source.onFrame → pipeline.feed` et `pipeline → server.publish`. Ordre de notification pour une même trame : match, puis session, puis event (un overlay qui réagit à `matchEnded` lit déjà le nouveau compteur).
 - `MatchTracker` (`src/core/MatchTracker.ts`) : le match naît de la première trame d'état (elles précèdent parfois `MatchCreated`). Un replay d'historique est actif de `ReplayCreated` (ou d'une trame avec `Game.Frame`) jusqu'à la première trame d'état sans `Frame` : pendant ce temps AUCUN effet (ni état, ni résultat, ni event vers les overlays, ni apprentissage du joueur). Un nouveau GUID (ou un changement de mode quand un GUID est vide) sans `MatchDestroyed` clôt l'ancien match comme abandonné. Sans équipe connue pour le joueur local, un `MatchEnded` ne produit pas de résultat (on ne devine pas).
 
-## Statut de connexion (P5)
+## Statut de connexion et configuration du jeu (P5)
 
-- `game-closed` : processus du jeu absent.
-- `api-disabled` : jeu lancé mais port 49124 injoignable (ini non configuré ou modifié sans relance).
-- `connected` : connexion WS établie.
-
-`GameConnection` ne connaît que `connected` / `disconnected` ; le passage à ces trois statuts (détection du processus du jeu) est à faire en P5. En attendant, un lien coupé est publié comme `game-closed`.
+- `game-closed` : processus du jeu absent. `api-disabled` : jeu lancé mais WebSocket 49124 injoignable (ini non configuré, modifié sans relance, ou jeu encore en chargement). `connected` : connexion établie.
+- Calcul pur : `deriveConnectionStatus(liaison connectée, processus présent)` (`src/core/gameSetup.ts`). `Services` interroge le processus toutes les 2 s via `GameHost.isRunning()` (`tasklist`, `RocketLeague.exe`).
+- `GameHost` (`src/game/GameHost.ts`) isole tout ce qui touche au système : détection des installations, processus, fermeture (`taskkill` SANS /F : fermeture normale, 15 s max), lancement par URL de boutique (`steam://rungameid/252950`, `com.epicgames.launcher://apps/Sugar?action=launch&silent=true`). Les tests de `Services` injectent un faux hôte ; sans hôte, `nullGameHost`.
+- Installation (`src/game/GameSetup.ts`) : Steam (registre `SteamPath` + `libraryfolders.vdf`), Epic (`LauncherInstalled.dat`, AppName « Sugar »), dossiers usuels. Un dossier est valide s'il contient `TAGame\Config`. Choix manuel enregistré dans la config (`gameDir`) ; la boutique se déduit du chemin (`steamapps` / `epic`) et sert à relancer.
+- Ini : `TAStatsAPI.ini` s'il existe, sinon `DefaultStatsAPI.ini`. Les modifications (`PacketSendRate`) conservent commentaires et fins de ligne. L'original est copié UNE fois en `<fichier>.rlstudio.bak` (jamais écrasé), restaurable depuis le client. Écriture refusée (Program Files) → message demandant les droits administrateur. Toute modification exige de relancer le jeu.
+- Relance : ferme le jeu s'il tourne, puis le relance par sa boutique ; le client demande confirmation si le jeu tourne.
 
 ## Commandes vers le jeu (P5)
 
-- Envoyées sur la même connexion WebSocket que la réception des events (49124).
-- Format : `{ "Command": "SetHUDVisibility", "Data": { "bVisible": false } }` — `Data` en OBJET (en string ou en TCP : aucun effet).
+- Envoyées sur la même connexion WebSocket que la réception des events (49124), par `GameConnection.send()` (`false` si hors connexion).
+- Format : `{ "Command": "SetHUDVisibility", "Data": { "bVisible": false } }` — `Data` en OBJET (en string ou en TCP : aucun effet). Types dans `src/core/commands.ts` (`SetHUDVisibility`, `SetMatchPaused`).
+- Le client n'expose que « Masquer le HUD du jeu » ; le HUD masqué reste masqué si l'application se ferme (le réafficher avant de quitter).
 
 ## Règle de résultat et filtre de session
 
@@ -272,7 +274,8 @@ Interface de la maquette (direction A : fond sombre, bleu = victoires et états 
 - X et Y affichés sont la position réelle de la fenêtre (`placeInArea`) ; on mémorise toujours ancre + décalage : modifier X ou Y recalcule le décalage depuis la même ancre (`offsetFromPosition`, inverse exact de `placeInArea`, y compris sur les axes centrés dont le milieu tombe sur une demi-unité).
 - Sécurité du client : la politique de contenu n'autorise que `127.0.0.1` (iframe d'aperçu et images d'aperçu des packs), aucune autre connexion réseau.
 - Polices : Archivo / IBM Plex de la maquette pas encore embarquées, repli sur des polices système (à remplacer à la fin, sans impact sur le reste).
-- Pas encore fait : « Placer à la souris » (bouton désactivé), choix de l'écran (un seul : le principal), réglages du jeu au-delà du statut (installation, ini, raccourci : P5).
+- Réglages du jeu (P5) : statut, installation, API Stats (ini + sauvegarde), relance, commande HUD, serveur d'overlays (overlays connectés, paquets/s).
+- Affichage des overlays (P3) : choix de l'écran, interrupteur global, raccourci global (voir « Fenêtres d'overlay »).
 
 ## Fenêtres d'overlay (P2/P3)
 
@@ -291,3 +294,10 @@ Interface de la maquette (direction A : fond sombre, bleu = victoires et états 
 
 - Mode édition : souris activée, glisser-déposer (CSS `-webkit-app-region: drag` injecté par `insertCSS`), la position est recalculée en ancre + décalage et renvoyée au client.
 - Le raccourci global masque les fenêtres d'overlay de l'app ; il n'agit pas sur OBS (OBS gère ses propres sources).
+
+## Écran, raccourci et placement à la souris (P3)
+
+- Écran : `displayId` dans la config (`null` = principal ; un écran débranché retombe sur le principal). `Services.setDisplay` / `refreshDisplays` préviennent le client (`app:display`) et replacent les fenêtres (la zone de travail vient de `getState().display.workArea`).
+- Interrupteur : `Services.setOverlaysVisible` masque / réaffiche les fenêtres sans les fermer (`OverlayWindowManager.setVisible`, aussi pour celles ouvertes pendant le masquage). Non enregistré : au démarrage, les overlays sont visibles.
+- Raccourci global : `shortcut` dans la config (défaut `Ctrl+Shift+F9`, `null` = aucun), format Electron validé par `isValidAccelerator` (au moins un modificateur, ou une touche F). Enregistré par le processus principal (`globalShortcut`) ; si le système refuse (déjà pris), `overlays.shortcutActive` passe à `false` et le client le signale.
+- Placement à la souris : les overlays restent transparents à la souris (aucune page de pack ne reçoit d'événement). Une **couche de placement** (`src/main/windows/editWindow.ts`, page `#edit` du client, même preload) couvre la zone de travail et dessine un cadre par overlay actif. Déplacement avec aimantation (8 px) aux bords et au centre (Alt = sans), poignée bas-droite pour l'échelle (proportions verrouillées, bornes d'échelle, reste dans l'écran). Calculs purs dans `src/core/editing.ts` ; chaque geste appelle `setModulePlacement` (un seul appel en vol, dernière valeur gardée). Échap ou « Terminé » ferme la couche. L'IPC accepte le client ET la couche de placement.

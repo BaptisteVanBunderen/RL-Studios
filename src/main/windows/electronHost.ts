@@ -2,7 +2,14 @@ import { BrowserWindow, screen, session } from 'electron'
 import type { Rect } from '@core/index'
 import type { OverlayWindow, WindowHost } from './OverlayWindowManager'
 
-function createWindow(key: string, bounds: Rect, scale: number): OverlayWindow {
+function createWindow(
+  key: string,
+  bounds: Rect,
+  scale: number,
+  startVisible: boolean
+): OverlayWindow {
+  let visible = startVisible
+  let ready = false
   const partition = `overlay:${key}`
   const overlaySession = session.fromPartition(partition)
   overlaySession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
@@ -52,7 +59,8 @@ function createWindow(key: string, bounds: Rect, scale: number): OverlayWindow {
   contents.on('will-attach-webview', (event) => event.preventDefault())
 
   window.once('ready-to-show', () => {
-    window.showInactive()
+    ready = true
+    if (visible) window.showInactive()
     window.setAlwaysOnTop(true, 'screen-saver')
   })
 
@@ -70,6 +78,12 @@ function createWindow(key: string, bounds: Rect, scale: number): OverlayWindow {
       currentScale = next
       applyScale(next)
     },
+    setVisible(next) {
+      visible = next
+      if (!ready || window.isDestroyed()) return
+      if (next) window.showInactive()
+      else window.hide()
+    },
     close() {
       if (!window.isDestroyed()) window.close()
     },
@@ -82,10 +96,12 @@ function createWindow(key: string, bounds: Rect, scale: number): OverlayWindow {
   }
 }
 
-export function createElectronHost(): WindowHost {
+/** `getWorkArea` : zone de l'écran choisi par l'utilisateur pour les overlays. */
+export function createElectronHost(getWorkArea: () => Rect): WindowHost {
   return {
-    createOverlayWindow: ({ key, bounds, scale }) => createWindow(key, bounds, scale),
-    getWorkArea: () => screen.getPrimaryDisplay().workArea,
+    createOverlayWindow: ({ key, bounds, scale, visible }) =>
+      createWindow(key, bounds, scale, visible),
+    getWorkArea,
     onWorkAreaChange(listener) {
       // Trois appels explicites : les signatures d'événements d'Electron diffèrent.
       const handler = (): void => listener()

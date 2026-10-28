@@ -50,13 +50,37 @@ export type { InvalidPack, LoadedPack, PackScan } from './packs'
 export {
   DEFAULT_GAME_PORT,
   DEFAULT_OVERLAY_PORT,
+  DEFAULT_SHORTCUT,
   MAX_SCALE,
   MIN_SCALE,
   defaultConfig,
   parseConfig
 } from './config'
+export {
+  DEFAULT_PACKET_SEND_RATE,
+  MAX_PACKET_SEND_RATE,
+  STATS_API_SECTION,
+  applyStatsApiIni,
+  deriveConnectionStatus,
+  isValidPacketSendRate,
+  launcherFromPath,
+  parseStatsApiIni
+} from './gameSetup'
+export type {
+  GameInstall,
+  GameLauncher,
+  GameSetupInfo,
+  StatsApiChange,
+  StatsApiIni,
+  StatsApiSettings
+} from './gameSetup'
+export { buildCommandMessage } from './commands'
+export type { GameCommand } from './commands'
 export { resolveSettings, validateSettingValue } from './settings'
 export type { SettingCheck, SettingValue } from './settings'
+export { SNAP_DISTANCE, moveRect, scaleFromDrag } from './editing'
+export { acceleratorFromKey, isValidAccelerator } from './accelerator'
+export type { KeyInput } from './accelerator'
 export { diffKeys, offsetFromPosition, placeInArea, scaledSize } from './placement'
 export type { Rect, Size } from './placement'
 export type { AppConfig, ModuleConfig } from './config'
@@ -64,6 +88,12 @@ export {
   IPC_EVENTS,
   IPC_INVOKE,
   adjustSessionArgs,
+  configureStatsApiArgs,
+  setGameDirArgs,
+  setDisplayArgs,
+  setGameHudArgs,
+  setOverlaysVisibleArgs,
+  setShortcutArgs,
   setModuleEnabledArgs,
   setModulePlacementArgs,
   setModuleSettingArgs,
@@ -73,11 +103,13 @@ export {
 export type {
   AppState,
   DisplayInfo,
+  DisplayState,
   EventMap,
   InvalidPackSummary,
   InvokeMap,
   ModulePlacementChange,
   ModuleSummary,
+  OverlaySettings,
   PackSummary,
   PacksSnapshot,
   RlStudioApi,

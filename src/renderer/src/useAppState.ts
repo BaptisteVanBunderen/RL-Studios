@@ -29,7 +29,9 @@ export function useAppState(): { state: AppState | null; error: string | null } 
     const unsubscribes = [
       api.onConnection((connection) => setState((s) => (s ? { ...s, connection } : s))),
       api.onSession((session) => setState((s) => (s ? { ...s, session } : s))),
-      api.onPacks((packs) => setState((s) => (s ? { ...s, packs } : s)))
+      api.onPacks((packs) => setState((s) => (s ? { ...s, packs } : s))),
+      api.onDisplay((d) => setState((s) => (s ? { ...s, ...d } : s))),
+      api.onOverlays((overlays) => setState((s) => (s ? { ...s, overlays } : s)))
     ]
     return () => {
       alive = false

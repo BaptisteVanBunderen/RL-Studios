@@ -136,8 +136,9 @@ function PositionPanel({ module }: { module: ModuleSummary }): React.JSX.Element
       <div className="mt-4 flex gap-2">
         <Button
           className="flex-1"
-          disabled
-          title="Le déplacement à la souris arrive avec le mode édition"
+          disabled={!module.enabled}
+          title={module.enabled ? undefined : 'Active le module pour le placer'}
+          onClick={() => run(window.rlstudio.startEditMode())}
         >
           <MoveIcon size={16} /> Placer à la souris
         </Button>

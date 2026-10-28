@@ -60,3 +60,10 @@ input[type='number']::-webkit-outer-spin-button {
   appearance: none;
   margin: 0;
 }
+
+/* Couche de placement à la souris : fenêtre transparente, le fond est dessiné par la page. */
+html.edit-layer,
+html.edit-layer body,
+html.edit-layer #root {
+  background: transparent !important;
+}

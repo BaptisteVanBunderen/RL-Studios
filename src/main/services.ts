@@ -3,6 +3,8 @@ import {
   MAX_SCALE,
   MIN_SCALE,
   StatsPipeline,
+  deriveConnectionStatus,
+  isValidPacketSendRate,
   parseModuleKey,
   positionSchema,
   resolveSettings,
@@ -10,6 +12,12 @@ import {
   toPacksSnapshot,
   type AppState,
   type DisplayInfo,
+  type DisplayState,
+  type OverlaySettings,
+  isValidAccelerator,
+  type GameInstall,
+  type GameSetupInfo,
+  type StatsApiIni,
   type ConnectionStatus,
   type PacksSnapshot,
   type Position,
@@ -18,7 +26,16 @@ import {
   type SettingValue,
   type Unsubscribe
 } from '@core/index'
-import { GameConnection, type LinkStatus } from '@game/index'
+import {
+  GameConnection,
+  nullGameHost,
+  readStatsApiIni,
+  restoreStatsApiIni,
+  toInstall,
+  writeStatsApiIni,
+  type GameHost,
+  type LinkStatus
+} from '@game/index'
 import { OverlayServer, type PackSource } from '@server/index'
 import { ConfigStore } from './config/ConfigStore'
 import { PackLoader } from './packs/PackLoader'
@@ -28,13 +45,18 @@ export interface ServicesOptions {
   overlaysDir: string
   sdkSource: string
   /**
-   * Écran sur lequel les overlays sont placés (fourni par Electron ; sans lui, un écran
+   * Écrans branchés, l'écran principal en premier (fournis par Electron ; sans eux, un écran
    * 1920 × 1080 fictif, utile aux tests).
    */
-  getDisplay?: () => DisplayInfo
+  getDisplays?: () => DisplayInfo[]
   overlayPort?: number
   gameWebPort?: number
+  /** Processus, installation et lancement du jeu ; sans lui, un hôte inactif (tests). */
+  gameHost?: GameHost
 }
+
+/** Délai entre deux vérifications de la présence du processus du jeu. */
+const PROCESS_POLL_MS = 2000
 
 export function toConnectionStatus(link: LinkStatus): ConnectionStatus {
   return link === 'connected' ? 'connected' : 'game-closed'
@@ -48,16 +70,27 @@ export class Services {
   readonly connection: GameConnection
   readonly configRecovered: boolean
   private readonly gamePort: number
-  private readonly getDisplay: (() => DisplayInfo) | undefined
+  private readonly getDisplays: (() => DisplayInfo[]) | undefined
+  private overlaysVisible = true
+  private shortcutActive = false
+  private readonly host: GameHost
+  private linkConnected = false
+  private processRunning = false
+  private processTimer: ReturnType<typeof setInterval> | null = null
+  private restarting = false
+  private frameTimes: number[] = []
 
   private connectionStatus: ConnectionStatus = 'game-closed'
   private started = false
   private readonly sessionChanges = new Emitter<SessionState>()
   private readonly connectionChanges = new Emitter<ConnectionStatus>()
   private readonly packChanges = new Emitter<PacksSnapshot>()
+  private readonly displayChanges = new Emitter<DisplayState>()
+  private readonly overlayChanges = new Emitter<OverlaySettings>()
 
   constructor(options: ServicesOptions) {
-    this.getDisplay = options.getDisplay
+    this.getDisplays = options.getDisplays
+    this.host = options.gameHost ?? nullGameHost
     this.config = new ConfigStore(options.configFile)
     this.configRecovered = this.config.load().recovered
     this.packs = new PackLoader(options.overlaysDir)
@@ -94,8 +127,14 @@ export class Services {
 
     this.gamePort = options.gameWebPort ?? this.config.config.gameWebPort
     this.connection = new GameConnection({ port: this.gamePort })
-    this.connection.onFrame((frame) => this.pipeline.feed(frame.raw))
-    this.connection.onStatus((link) => this.setConnectionStatus(toConnectionStatus(link)))
+    this.connection.onFrame((frame) => {
+      this.noteFrame()
+      this.pipeline.feed(frame.raw)
+    })
+    this.connection.onStatus((link) => {
+      this.linkConnected = link === 'connected'
+      this.refreshStatus()
+    })
 
     this.server.publish('session', this.pipeline.session)
     this.server.publish('match', null)
@@ -107,10 +146,15 @@ export class Services {
     await this.packs.scan()
     await this.server.start()
     this.started = true
+    await this.refreshProcess()
+    this.processTimer = setInterval(() => void this.refreshProcess(), PROCESS_POLL_MS)
+    this.processTimer.unref()
     this.connection.start()
   }
 
   async stop(): Promise<void> {
+    if (this.processTimer) clearInterval(this.processTimer)
+    this.processTimer = null
     this.connection.stop()
     await this.server.stop()
     await this.config.flush()
@@ -122,7 +166,8 @@ export class Services {
       connection: this.connectionStatus,
       session: this.pipeline.session,
       packs: this.packsSnapshot(),
-      display: this.display(),
+      ...this.displayState(),
+      overlays: this.overlaySettings(),
       gamePort: this.gamePort,
       overlayBaseUrl: this.overlayBaseUrl()
     }
@@ -237,6 +282,128 @@ export class Services {
     return this.publishPacks()
   }
 
+  // --- écran et affichage global des overlays -----------------------------------------------------
+
+  /** Choisit l'écran des overlays (`null` = principal) ; les fenêtres s'y replacent aussitôt. */
+  async setDisplay(displayId: number | null): Promise<DisplayState> {
+    if (displayId !== null && !this.allDisplays().some((d) => d.id === displayId)) {
+      throw new Error('Écran introuvable : il a peut-être été débranché.')
+    }
+    await this.config.update((c) => {
+      c.displayId = displayId
+    })
+    return this.refreshDisplays()
+  }
+
+  /** À appeler quand les écrans changent (branchement, résolution) : prévient client et fenêtres. */
+  refreshDisplays(): DisplayState {
+    const state = this.displayState()
+    this.displayChanges.emit(state)
+    this.publishPacks() // les fenêtres d'overlay se replacent d'après la nouvelle zone
+    return state
+  }
+
+  setOverlaysVisible(visible: boolean): OverlaySettings {
+    this.overlaysVisible = visible
+    return this.emitOverlays()
+  }
+
+  toggleOverlays(): OverlaySettings {
+    return this.setOverlaysVisible(!this.overlaysVisible)
+  }
+
+  /** Change le raccourci global (`null` le supprime). Le processus principal l'enregistre. */
+  async setShortcut(shortcut: string | null): Promise<OverlaySettings> {
+    if (shortcut !== null && !isValidAccelerator(shortcut)) {
+      throw new Error('Raccourci invalide : un modificateur (Ctrl, Alt, Shift) et une touche.')
+    }
+    await this.config.update((c) => {
+      c.shortcut = shortcut
+    })
+    return this.emitOverlays()
+  }
+
+  /** Le processus principal dit si le système a accepté le raccourci. */
+  reportShortcutActive(active: boolean): void {
+    if (active === this.shortcutActive) return
+    this.shortcutActive = active
+    this.emitOverlays()
+  }
+
+  // --- jeu : installation, ini, relance, commandes -------------------------------------------------
+
+  async getGameSetup(): Promise<GameSetupInfo> {
+    const candidates = await this.host.detectInstalls()
+    const install = await this.chooseInstall(candidates)
+    let ini: StatsApiIni = { found: false }
+    if (install) ini = await readStatsApiIni(install.dir).catch(() => ({ found: false }) as const)
+    return {
+      install,
+      candidates,
+      ini,
+      processRunning: this.processRunning,
+      packetsPerSecond: this.packetsPerSecond(),
+      overlayClients: this.server.clientCount
+    }
+  }
+
+  /** Relance la recherche automatique (même chose que `getGameSetup`, nommée pour le bouton). */
+  detectGame(): Promise<GameSetupInfo> {
+    return this.getGameSetup()
+  }
+
+  /** Choisit le dossier du jeu à la main ; `null` revient à la détection automatique. */
+  async setGameDir(dir: string | null): Promise<GameSetupInfo> {
+    if (dir !== null && !(await toInstall(dir))) {
+      throw new Error(
+        'Ce dossier ne contient pas Rocket League (sous-dossier TAGame\\Config introuvable). Choisis le dossier qui contient « TAGame » et « Binaries ».'
+      )
+    }
+    await this.config.update((c) => {
+      c.gameDir = dir
+    })
+    return this.getGameSetup()
+  }
+
+  /** Active l'API (ou la désactive avec 0) dans l'ini ; le jeu doit ensuite être relancé. */
+  async configureStatsApi(packetSendRate: number): Promise<GameSetupInfo> {
+    if (!isValidPacketSendRate(packetSendRate)) {
+      throw new Error('Paquets par seconde : entier de 0 à 120 attendu')
+    }
+    const install = await this.requireInstall()
+    await writeStatsApiIni(install.dir, { packetSendRate })
+    return this.getGameSetup()
+  }
+
+  async restoreStatsApi(): Promise<GameSetupInfo> {
+    const install = await this.requireInstall()
+    await restoreStatsApiIni(install.dir)
+    return this.getGameSetup()
+  }
+
+  /** Ferme le jeu s'il tourne puis le relance par sa boutique (Steam ou Epic). */
+  async restartGame(): Promise<void> {
+    if (this.restarting) throw new Error('Une relance est déjà en cours')
+    const install = await this.requireInstall()
+    if (!install.launcher) {
+      throw new Error('Boutique du jeu inconnue (ni Steam ni Epic) : lance Rocket League toi-même.')
+    }
+    this.restarting = true
+    try {
+      await this.host.closeGame()
+      await this.refreshProcess()
+      await this.host.launch(install.launcher)
+    } finally {
+      this.restarting = false
+    }
+  }
+
+  /** Masque ou affiche le HUD natif du jeu (commande `SetHUDVisibility`). */
+  setGameHud(visible: boolean): void {
+    const sent = this.connection.send({ command: 'SetHUDVisibility', data: { bVisible: visible } })
+    if (!sent) throw new Error("Le jeu n'est pas connecté : impossible d'envoyer la commande.")
+  }
+
   /** Corrige les compteurs de la session à la main (boutons − / + du client). */
   adjustSession(values: SessionAdjustment): SessionState {
     this.pipeline.adjustSession(values)
@@ -260,13 +427,46 @@ export class Services {
     return this.packChanges.on(listener)
   }
 
-  private display(): DisplayInfo {
-    return (
-      this.getDisplay?.() ?? {
-        label: 'Principal — 1920 × 1080',
-        workArea: { x: 0, y: 0, width: 1920, height: 1080 }
-      }
-    )
+  onDisplay(listener: (state: DisplayState) => void): Unsubscribe {
+    return this.displayChanges.on(listener)
+  }
+
+  onOverlays(listener: (settings: OverlaySettings) => void): Unsubscribe {
+    return this.overlayChanges.on(listener)
+  }
+
+  private allDisplays(): DisplayInfo[] {
+    const displays = this.getDisplays?.() ?? []
+    return displays.length > 0
+      ? displays
+      : [
+          {
+            id: 0,
+            label: 'Principal — 1920 × 1080',
+            workArea: { x: 0, y: 0, width: 1920, height: 1080 }
+          }
+        ]
+  }
+
+  /** L'écran choisi s'il est encore branché, sinon le premier (le principal). */
+  private displayState(): DisplayState {
+    const displays = this.allDisplays()
+    const chosen = this.config.config.displayId
+    return { display: displays.find((d) => d.id === chosen) ?? displays[0], displays }
+  }
+
+  private overlaySettings(): OverlaySettings {
+    return {
+      visible: this.overlaysVisible,
+      shortcut: this.config.config.shortcut,
+      shortcutActive: this.shortcutActive
+    }
+  }
+
+  private emitOverlays(): OverlaySettings {
+    const settings = this.overlaySettings()
+    this.overlayChanges.emit(settings)
+    return settings
   }
 
   private packsSnapshot(): PacksSnapshot {
@@ -277,6 +477,47 @@ export class Services {
     const snapshot = this.packsSnapshot()
     this.packChanges.emit(snapshot)
     return snapshot
+  }
+
+  private async chooseInstall(candidates: GameInstall[]): Promise<GameInstall | null> {
+    const chosen = this.config.config.gameDir
+    if (chosen) {
+      const install = await toInstall(chosen)
+      if (install) return install
+    }
+    return candidates[0] ?? null
+  }
+
+  private async requireInstall(): Promise<GameInstall> {
+    const install = await this.chooseInstall(await this.host.detectInstalls())
+    if (!install)
+      throw new Error('Installation de Rocket League introuvable : choisis son dossier.')
+    return install
+  }
+
+  private async refreshProcess(): Promise<void> {
+    try {
+      this.processRunning = await this.host.isRunning()
+    } catch {
+      this.processRunning = false
+    }
+    this.refreshStatus()
+  }
+
+  private refreshStatus(): void {
+    this.setConnectionStatus(deriveConnectionStatus(this.linkConnected, this.processRunning))
+  }
+
+  private noteFrame(): void {
+    const now = Date.now()
+    this.frameTimes.push(now)
+    while (this.frameTimes.length > 0 && this.frameTimes[0] < now - 2000) this.frameTimes.shift()
+  }
+
+  /** Trames reçues sur la dernière seconde (0 si le jeu ne parle plus). */
+  private packetsPerSecond(): number {
+    const since = Date.now() - 1000
+    return this.frameTimes.filter((t) => t >= since).length
   }
 
   private setConnectionStatus(status: ConnectionStatus): void {

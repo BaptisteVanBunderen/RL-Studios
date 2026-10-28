@@ -28,7 +28,7 @@ describe('Services : pack entier, session corrigée, écran', () => {
       sdkSource: '',
       overlayPort: 0,
       gameWebPort: 1, // jamais ouvert : ne touche pas au vrai jeu (49124)
-      ...(display ? { getDisplay: () => display as never } : {})
+      ...(display ? { getDisplays: () => [display as never] } : {})
     })
     started.push(services)
     await services.start()
@@ -118,6 +118,7 @@ describe('Services : pack entier, session corrigée, écran', () => {
     it('sans fournisseur : un écran 1920 × 1080 par défaut', async () => {
       const services = await create()
       expect(services.getState().display).toEqual({
+        id: 0,
         label: 'Principal — 1920 × 1080',
         workArea: { x: 0, y: 0, width: 1920, height: 1080 }
       })
@@ -125,6 +126,7 @@ describe('Services : pack entier, session corrigée, écran', () => {
 
     it('utilise l’écran fourni (Electron)', async () => {
       const display = {
+        id: 1,
         label: 'Principal — 2560 × 1440',
         workArea: { x: 0, y: 0, width: 2048, height: 1104 }
       }

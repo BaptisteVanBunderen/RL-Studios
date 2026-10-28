@@ -12,13 +12,19 @@ export interface OverlayWindow {
   load(url: string): void
   setBounds(bounds: Rect): void
   setScale(scale: number): void
+  setVisible(visible: boolean): void
   close(): void
   onClosed(listener: () => void): void
   onCrashed(listener: () => void): void
 }
 
 export interface WindowHost {
-  createOverlayWindow(options: { key: string; bounds: Rect; scale: number }): OverlayWindow
+  createOverlayWindow(options: {
+    key: string
+    bounds: Rect
+    scale: number
+    visible: boolean
+  }): OverlayWindow
   getWorkArea(): Rect
   onWorkAreaChange(listener: () => void): Unsubscribe
 }
@@ -39,6 +45,7 @@ export class OverlayWindowManager {
   private readonly open = new Map<string, Open>()
   private readonly stopWatchingDisplays: Unsubscribe
   private last: PacksSnapshot | null = null
+  private visible = true
 
   constructor(
     private readonly host: WindowHost,
@@ -76,6 +83,12 @@ export class OverlayWindowManager {
     if (this.last) this.sync(this.last)
   }
 
+  /** Masque ou réaffiche toutes les overlays (raccourci global), sans les fermer. */
+  setVisible(visible: boolean): void {
+    this.visible = visible
+    for (const entry of this.open.values()) entry.window.setVisible(visible)
+  }
+
   closeAll(): void {
     for (const key of this.openKeys) this.close(key)
   }
@@ -86,7 +99,12 @@ export class OverlayWindowManager {
   }
 
   private openWindow(key: string, bounds: Rect, scale: number): void {
-    const window = this.host.createOverlayWindow({ key, bounds, scale })
+    const window = this.host.createOverlayWindow({
+      key,
+      bounds,
+      scale,
+      visible: this.visible
+    })
     const entry: Open = { window, bounds, scale }
     this.open.set(key, entry)
 
