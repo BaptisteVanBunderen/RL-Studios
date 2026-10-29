@@ -87,6 +87,12 @@ export const RefreshIcon = (p: IconProps): React.JSX.Element => (
   </Svg>
 )
 
+export const BookIcon = (p: IconProps): React.JSX.Element => (
+  <Svg {...p}>
+    <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5zM20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5z" />
+  </Svg>
+)
+
 export const CheckIcon = (p: IconProps): React.JSX.Element => (
   <Svg {...p}>
     <path d="m5 12.5 4.5 4.5L19 7.5" />

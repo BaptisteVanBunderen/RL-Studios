@@ -99,13 +99,12 @@ src/
 overlays/        packs FOURNIS (extraResources → `resources/overlays`, remplacés à chaque mise à jour) ; `example/` = pack de démonstration du SDK. Les packs de l'utilisateur vont dans `<userData>/overlays` (voir « Dossiers de packs »)
 captures/        trames de référence (.jsonl.gz) pour le rejeu et les tests
 tools/           scripts autonomes : capture, observation, test des commandes
-docs/            architecture, constats API, guide de création d'overlay (P7)
+docs/            architecture, constats API, overlay-guide.md (guide de création en anglais) et overlay-guide.fr.md (version française), affichés dans le client selon la langue
 ```
 
 ## Dossiers de packs (fournis / utilisateur)
 
-- Deux dossiers, lus dans cet ordre : les packs **fournis** (`overlays/` en développement, `resources/overlays` une fois installé) puis ceux de **l'utilisateur** (`<userData>/overlays`, soit `%APPDATA%
-l-studiooverlays`).
+- Deux dossiers, lus dans cet ordre : les packs **fournis** (`overlays/` en développement, `resources/overlays` une fois installé) puis ceux de **l'utilisateur** (`<userData>/overlays`, soit `%APPDATA%\rl-studio\overlays`).
 - Pourquoi : l'installeur (NSIS, par utilisateur) réécrit `resources/overlays` à chaque mise à jour ou réinstallation ; un pack déposé ou modifié là disparaîtrait. `<userData>` n'est jamais touché par l'installeur ni par la désinstallation.
 - À identifiant égal, le pack de l'utilisateur **remplace** le pack fourni (avertissement « remplace le pack du même nom de … » sur le pack). Pour modifier un pack fourni : le copier chez l'utilisateur. S'il est cassé, il reste listé comme invalide et masque quand même le pack fourni (pas de repli silencieux).
 - Le client ouvre le dossier de l'utilisateur (« Dossier overlays »). `Services` le crée au démarrage. Sans `userOverlaysDir` (tests), le dossier fourni sert aux deux.
@@ -285,6 +284,7 @@ Interface de la maquette (direction A : fond sombre, bleu = victoires et états 
 - X et Y affichés sont la position réelle de la fenêtre (`placeInArea`) ; on mémorise toujours ancre + décalage : modifier X ou Y recalcule le décalage depuis la même ancre (`offsetFromPosition`, inverse exact de `placeInArea`, y compris sur les axes centrés dont le milieu tombe sur une demi-unité).
 - Sécurité du client : la politique de contenu n'autorise que `127.0.0.1` (iframe d'aperçu et images d'aperçu des packs), aucune autre connexion réseau.
 - Polices : Archivo / IBM Plex de la maquette pas encore embarquées, repli sur des polices système (à remplacer à la fin, sans impact sur le reste).
+- **Guide** (P7) : `docs/overlay-guide.md` et `docs/overlay-guide.fr.md` sont importés tels quels dans le client (`?raw`, une seule source par langue, embarquées au build) et affiché par `Markdown.tsx`. Le rendu repose sur `src/core/markdown.ts`, un analyseur du strict nécessaire (titres, listes, code, tableaux, citations, `code`, **gras**), sans dépendance ni HTML injecté. Un test (`markdown.test.ts`) lit le vrai guide : il refuse toute balise que le rendu ne sait pas afficher et fait valider les exemples de manifeste et de réglages par le vrai `parseManifest`, donc le guide ne peut pas contredire le format. Deux versions : `overlay-guide.md` (anglais, référence) et `overlay-guide.fr.md` ; le client prend celle de la langue de l'interface. Un test vérifie qu'elles ont la même structure (titres, blocs de code, tableaux, listes) et les mêmes exemples JSON : en modifier une impose de modifier l'autre. En développement, `electron.vite.config.ts` autorise Vite à lire hors de `src/renderer`.
 - Réglages du jeu (P5) : statut, installation, API Stats (ini + sauvegarde), relance, commande HUD, serveur d'overlays (overlays connectés, paquets/s).
 - Affichage des overlays (P3) : choix de l'écran, interrupteur global, raccourci global (voir « Fenêtres d'overlay »).
 

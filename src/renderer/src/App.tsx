@@ -3,6 +3,7 @@ import { detectLanguage, pick } from '@core/index'
 import { AppContext, type View } from './appContext'
 import { Sidebar } from './components/Sidebar'
 import { GameSettings } from './pages/GameSettings'
+import { Guide } from './pages/Guide'
 import { Library } from './pages/Library'
 import { ModulePage } from './pages/ModulePage'
 import { PackPage } from './pages/PackPage'
@@ -57,6 +58,7 @@ function App(): React.JSX.Element {
           {view.name === 'pack' && <PackPage packId={view.packId} />}
           {view.name === 'module' && <ModulePage moduleKey={view.key} />}
           {view.name === 'settings' && <GameSettings />}
+          {view.name === 'guide' && <Guide />}
         </main>
       </div>
       {toast && <Toast message={toast} onClose={closeToast} />}

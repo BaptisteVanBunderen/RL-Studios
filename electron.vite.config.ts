@@ -29,6 +29,8 @@ export default defineConfig({
         '@core': resolve('src/core')
       }
     },
+    // Le guide (docs/overlay-guide.md) est importé en texte depuis le client : hors de sa racine.
+    server: { fs: { allow: [resolve('.')] } },
     plugins: [react(), tailwindcss()]
   }
 })
