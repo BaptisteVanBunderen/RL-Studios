@@ -26,7 +26,8 @@ export const IPC_INVOKE = {
   setOverlaysVisible: 'overlays:set-visible',
   setShortcut: 'overlays:set-shortcut',
   startEditMode: 'overlays:start-edit',
-  stopEditMode: 'overlays:stop-edit'
+  stopEditMode: 'overlays:stop-edit',
+  setLanguage: 'app:set-language'
 } as const
 
 /** Main → client : notifications (`webContents.send`). */
@@ -35,5 +36,6 @@ export const IPC_EVENTS = {
   session: 'app:session',
   packs: 'app:packs',
   display: 'app:display',
-  overlays: 'app:overlays'
+  overlays: 'app:overlays',
+  language: 'app:language'
 } as const

@@ -3,6 +3,7 @@ import { MatchTracker, type TrackerOptions } from './MatchTracker'
 import type { MatchState } from './match'
 import { normalize } from './normalize'
 import { isOverlayEvent, type OverlayEvent } from './protocol'
+import type { Language } from './language'
 import type { SessionAdjustment } from './ipc'
 import { SessionStore, type SessionState } from './session'
 
@@ -59,8 +60,8 @@ export class StatsPipeline {
   }
 
   /** Corrige les compteurs à la main et prévient les abonnés si quelque chose a changé. */
-  adjustSession(values: SessionAdjustment): void {
-    if (this.store.adjust(values)) this.handlers.onSession?.(this.store.state)
+  adjustSession(values: SessionAdjustment, language?: Language): void {
+    if (this.store.adjust(values, language)) this.handlers.onSession?.(this.store.state)
   }
 
   /** Remet la session à zéro (action du client) et prévient les abonnés. */

@@ -33,7 +33,7 @@ function NavButton({
 }
 
 export function Sidebar({ view }: { view: View }): React.JSX.Element {
-  const { go } = useApp()
+  const { go, tr } = useApp()
   const run = useAction()
 
   return (
@@ -47,14 +47,14 @@ export function Sidebar({ view }: { view: View }): React.JSX.Element {
         <GridIcon />
       </NavButton>
       <NavButton
-        label="Réglages du jeu"
+        label={tr('Réglages du jeu', 'Game settings')}
         active={view.name === 'settings'}
         onClick={() => go({ name: 'settings' })}
       >
         <GearIcon />
       </NavButton>
       <NavButton
-        label="Ouvrir le dossier des overlays"
+        label={tr('Ouvrir le dossier des overlays', 'Open the overlays folder')}
         active={false}
         onClick={() => run(window.rlstudio.openOverlaysFolder())}
       >

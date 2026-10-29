@@ -31,7 +31,7 @@ function PackTile({ pack, baseUrl }: { pack: PackSummary; baseUrl: string }): Re
 }
 
 function PackCard({ pack }: { pack: PackSummary }): React.JSX.Element {
-  const { state, go } = useApp()
+  const { state, go, tr } = useApp()
   const run = useAction()
   const total = pack.modules.length
   const active = pack.modules.filter((m) => m.enabled).length
@@ -56,14 +56,15 @@ function PackCard({ pack }: { pack: PackSummary }): React.JSX.Element {
             {total} module{total > 1 ? 's' : ''}
           </Chip>
           {active > 0 && (
-            <Chip accent>
-              {active} actif{active > 1 ? 's' : ''}
-            </Chip>
+            <Chip accent>{tr(`${active} actif${active > 1 ? 's' : ''}`, `${active} active`)}</Chip>
           )}
         </div>
         {/* Allumé = au moins un module actif ; un clic éteint tout, ou allume tout si rien n'est actif. */}
         <Toggle
-          label={`Activer tous les modules de ${pack.name}`}
+          label={tr(
+            `Activer tous les modules de ${pack.name}`,
+            `Enable all modules of ${pack.name}`
+          )}
           checked={active > 0}
           onChange={() => run(window.rlstudio.setPackEnabled(pack.id, active === 0))}
         />
@@ -73,10 +74,13 @@ function PackCard({ pack }: { pack: PackSummary }): React.JSX.Element {
 }
 
 function InvalidPackCard({ pack }: { pack: InvalidPackSummary }): React.JSX.Element {
+  const { tr } = useApp()
   return (
     <article className="rounded-2xl border border-danger/40 bg-danger/5 p-4">
       <h3 className="text-lg font-bold text-danger">{pack.id}</h3>
-      <p className="text-sm text-sub">Ce dossier n&apos;a pas pu être chargé :</p>
+      <p className="text-sm text-sub">
+        {tr("Ce dossier n'a pas pu être chargé :", 'This folder could not be loaded:')}
+      </p>
       <ul className="mt-2 list-disc space-y-1 pl-5 font-mono text-xs text-danger">
         {pack.errors.map((error) => (
           <li key={error}>{error}</li>
@@ -87,7 +91,7 @@ function InvalidPackCard({ pack }: { pack: InvalidPackSummary }): React.JSX.Elem
 }
 
 export function Library(): React.JSX.Element {
-  const { state } = useApp()
+  const { state, tr } = useApp()
   const run = useAction()
   const { packs, invalid } = state.packs
   const activeModules = packs.reduce((n, p) => n + p.modules.filter((m) => m.enabled).length, 0)
@@ -96,16 +100,21 @@ export function Library(): React.JSX.Element {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Overlays"
-        subtitle={`${packs.length} pack${packs.length > 1 ? 's' : ''} installé${packs.length > 1 ? 's' : ''} · ${activeModules} module${activeModules > 1 ? 's' : ''} actif${activeModules > 1 ? 's' : ''}`}
+        subtitle={tr(
+          `${packs.length} pack${packs.length > 1 ? 's' : ''} installé${packs.length > 1 ? 's' : ''} · ${activeModules} module${activeModules > 1 ? 's' : ''} actif${activeModules > 1 ? 's' : ''}`,
+          `${packs.length} pack${packs.length > 1 ? 's' : ''} installed · ${activeModules} active module${activeModules > 1 ? 's' : ''}`
+        )}
       >
         <ConnectionPill />
         <IconButton
-          label="Actualiser la liste des packs"
+          label={tr('Actualiser la liste des packs', 'Refresh the pack list')}
           onClick={() => run(window.rlstudio.reloadPacks())}
         >
           <RefreshIcon />
         </IconButton>
-        <Button onClick={() => run(window.rlstudio.openOverlaysFolder())}>Dossier overlays</Button>
+        <Button onClick={() => run(window.rlstudio.openOverlaysFolder())}>
+          {tr('Dossier overlays', 'Overlays folder')}
+        </Button>
       </PageHeader>
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
@@ -122,8 +131,10 @@ export function Library(): React.JSX.Element {
             className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-line-hover bg-transparent p-6 text-sub transition hover:border-sub hover:text-text"
           >
             <span className="text-2xl leading-none">+</span>
-            <span className="font-semibold">Ajouter un overlay</span>
-            <span className="text-sm text-mute">Dépose un dossier dans overlays/</span>
+            <span className="font-semibold">{tr('Ajouter un overlay', 'Add an overlay')}</span>
+            <span className="text-sm text-mute">
+              {tr('Dépose un dossier dans overlays/', 'Drop a folder into overlays/')}
+            </span>
           </button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { isValidAccelerator } from './accelerator'
+import { LANGUAGES, type Language } from './language'
 import { positionSchema, type Position } from './manifest'
 import { isModuleKey } from './packs'
 
@@ -40,6 +41,8 @@ export interface AppConfig {
   localPlayerId: string | null
   /** Dossier d'installation de Rocket League choisi (détecté ou saisi à la main). */
   gameDir: string | null
+  /** Langue de l'interface ; `null` tant que l'utilisateur n'a pas choisi (langue du système). */
+  language: Language | null
   /** Écran des overlays (`id` d'Electron) ; `null` = écran principal. */
   displayId: number | null
   /** Raccourci global pour afficher / masquer les overlays (format Electron) ; `null` = aucun. */
@@ -58,6 +61,7 @@ const baseSchema = z.object({
   gameWebPort: port(DEFAULT_GAME_PORT),
   localPlayerId: z.string().min(1).nullable().catch(null),
   gameDir: z.string().min(1).max(1024).nullable().catch(null),
+  language: z.enum(LANGUAGES).nullable().catch(null),
   displayId: z.number().int().nullable().catch(null),
   shortcut: z.string().refine(isValidAccelerator).nullable().catch(DEFAULT_SHORTCUT)
 })
@@ -77,6 +81,7 @@ export function defaultConfig(): AppConfig {
     gameWebPort: DEFAULT_GAME_PORT,
     localPlayerId: null,
     gameDir: null,
+    language: null,
     displayId: null,
     shortcut: DEFAULT_SHORTCUT,
     modules: {}

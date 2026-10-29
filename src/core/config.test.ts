@@ -23,6 +23,7 @@ describe('parseConfig', () => {
       gameDir: 'D:/Jeux/rocketleague',
       displayId: 2,
       shortcut: 'Alt+O',
+      language: 'en',
       modules: { 'session-tracker/bar': { enabled: true } }
     }
     expect(parseConfig(raw)).toEqual(raw)

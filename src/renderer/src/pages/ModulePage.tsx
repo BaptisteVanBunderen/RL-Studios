@@ -55,7 +55,7 @@ function CoordinateInput({
 }
 
 function PositionPanel({ module }: { module: ModuleSummary }): React.JSX.Element {
-  const { state } = useApp()
+  const { state, tr } = useApp()
   const run = useAction()
   const { display } = state
 
@@ -100,7 +100,7 @@ function PositionPanel({ module }: { module: ModuleSummary }): React.JSX.Element
 
   return (
     <Panel>
-      <PanelTitle>Position et taille</PanelTitle>
+      <PanelTitle>{tr('Position et taille', 'Position and size')}</PanelTitle>
 
       <div className="grid grid-cols-2 gap-3">
         <CoordinateInput label="X" value={rect.x} onCommit={(x) => move(x, rect.y)} />
@@ -108,7 +108,7 @@ function PositionPanel({ module }: { module: ModuleSummary }): React.JSX.Element
       </div>
 
       <div className="mt-4">
-        <span className="mb-1 block text-sm text-sub">Écran</span>
+        <span className="mb-1 block text-sm text-sub">{tr('Écran', 'Display')}</span>
         <div className="rounded-xl border border-line bg-field px-3 py-2 text-sm">
           {display.label}
         </div>
@@ -116,7 +116,7 @@ function PositionPanel({ module }: { module: ModuleSummary }): React.JSX.Element
 
       <div className="mt-4">
         <div className="mb-1 flex items-baseline justify-between">
-          <span className="text-sm text-sub">Échelle</span>
+          <span className="text-sm text-sub">{tr('Échelle', 'Scale')}</span>
           <span className="font-mono text-sm text-accent">{Math.round(scaleDraft * 100)} %</span>
         </div>
         <input
@@ -126,11 +126,11 @@ function PositionPanel({ module }: { module: ModuleSummary }): React.JSX.Element
           step={5}
           value={Math.round(scaleDraft * 100)}
           onChange={(e) => changeScale(Number(e.target.value) / 100)}
-          aria-label="Échelle"
+          aria-label={tr('Échelle', 'Scale')}
           className="h-2 w-full cursor-pointer"
         />
         <p className="mt-1 font-mono text-xs text-mute">
-          {size.width} × {size.height} px à l&apos;écran
+          {size.width} × {size.height} {tr("px à l'écran", 'px on screen')}
         </p>
       </div>
 
@@ -138,19 +138,26 @@ function PositionPanel({ module }: { module: ModuleSummary }): React.JSX.Element
         <Button
           className="flex-1"
           disabled={!module.enabled}
-          title={module.enabled ? undefined : 'Active le module pour le placer'}
+          title={
+            module.enabled
+              ? undefined
+              : tr('Active le module pour le placer', 'Enable the module to place it')
+          }
           onClick={() => run(window.rlstudio.startEditMode())}
         >
-          <MoveIcon size={16} /> Placer à la souris
+          <MoveIcon size={16} /> {tr('Placer à la souris', 'Place with the mouse')}
         </Button>
         <Button
           disabled={!isCustom}
-          title="Revenir à la position et à la taille prévues par le pack"
+          title={tr(
+            'Revenir à la position et à la taille prévues par le pack',
+            'Go back to the position and size set by the pack'
+          )}
           onClick={() =>
             run(window.rlstudio.setModulePlacement(module.key, { position: null, scale: null }))
           }
         >
-          Rétablir
+          {tr('Rétablir', 'Reset')}
         </Button>
       </div>
     </Panel>
@@ -158,16 +165,24 @@ function PositionPanel({ module }: { module: ModuleSummary }): React.JSX.Element
 }
 
 function SettingsPanel({ module }: { module: ModuleSummary }): React.JSX.Element {
+  const { tr } = useApp()
   const run = useAction()
   const n = module.settings.length
 
   return (
     <Panel>
-      <PanelTitle aside={`${n} champ${n > 1 ? 's' : ''} déclaré${n > 1 ? 's' : ''}`}>
-        Réglages du module
+      <PanelTitle
+        aside={tr(
+          `${n} champ${n > 1 ? 's' : ''} déclaré${n > 1 ? 's' : ''}`,
+          `${n} declared field${n > 1 ? 's' : ''}`
+        )}
+      >
+        {tr('Réglages du module', 'Module settings')}
       </PanelTitle>
       {n === 0 ? (
-        <p className="text-sm text-sub">Ce module ne déclare aucun réglage.</p>
+        <p className="text-sm text-sub">
+          {tr('Ce module ne déclare aucun réglage.', 'This module declares no settings.')}
+        </p>
       ) : (
         <div className="space-y-5">
           {module.settings.map((def) => (
@@ -187,7 +202,7 @@ function SettingsPanel({ module }: { module: ModuleSummary }): React.JSX.Element
 }
 
 export function ModulePage({ moduleKey }: { moduleKey: string }): React.JSX.Element {
-  const { state, go } = useApp()
+  const { state, go, tr } = useApp()
   const run = useAction()
 
   const pack = state.packs.packs.find((p) => moduleKey.startsWith(`${p.id}/`))
@@ -196,9 +211,11 @@ export function ModulePage({ moduleKey }: { moduleKey: string }): React.JSX.Elem
   if (!pack || !module) {
     return (
       <div className="p-8">
-        <p className="text-sub">Ce module n&apos;existe plus.</p>
+        <p className="text-sub">
+          {tr("Ce module n'existe plus.", 'This module no longer exists.')}
+        </p>
         <Button className="mt-4" onClick={() => go({ name: 'library' })}>
-          Retour aux overlays
+          {tr('Retour aux overlays', 'Back to overlays')}
         </Button>
       </div>
     )
@@ -217,9 +234,9 @@ export function ModulePage({ moduleKey }: { moduleKey: string }): React.JSX.Elem
         }
         onBack={() => go({ name: 'pack', packId: pack.id })}
       >
-        <span className="text-sm text-sub">Module actif</span>
+        <span className="text-sm text-sub">{tr('Module actif', 'Module enabled')}</span>
         <Toggle
-          label={`Afficher « ${module.name} » dans le jeu`}
+          label={tr(`Afficher « ${module.name} » dans le jeu`, `Show "${module.name}" in the game`)}
           checked={module.enabled}
           onChange={(enabled) => run(window.rlstudio.setModuleEnabled(module.key, enabled))}
         />
@@ -228,7 +245,7 @@ export function ModulePage({ moduleKey }: { moduleKey: string }): React.JSX.Elem
       <div className="grid flex-1 grid-cols-1 gap-5 overflow-y-auto px-8 py-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <div className="space-y-5">
           <Panel>
-            <PanelTitle>Aperçu en direct</PanelTitle>
+            <PanelTitle>{tr('Aperçu en direct', 'Live preview')}</PanelTitle>
             <div className="flex min-h-64 items-center justify-center rounded-xl border border-line bg-tile p-4">
               <LivePreview
                 src={`${state.overlayBaseUrl}/overlay/${module.key}`}

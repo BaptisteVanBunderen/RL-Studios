@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SettingDefinition, SettingValue } from '@core/index'
+import { useApp } from '../appContext'
 import { MinusIcon, PlusIcon } from './icons'
 import { Toggle } from './ui'
 
@@ -70,6 +71,7 @@ function ColorField({
   value: string
   onCommit: OnCommit
 }): React.JSX.Element {
+  const { tr } = useApp()
   const palette = def.palette ?? DEFAULT_PALETTE
   const [draft, setDraft] = useDraft(value, onCommit)
   const current = draft.toLowerCase()
@@ -96,7 +98,7 @@ function ColorField({
         {/* valeur libre : le sélecteur natif ne gère que #rrggbb, ce qui suffit aux couleurs unies */}
         <label
           className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-dashed border-line-hover text-xs text-sub hover:text-text"
-          title="Autre couleur"
+          title={tr('Autre couleur', 'Other color')}
         >
           +
           <input
@@ -104,7 +106,7 @@ function ColorField({
             value={/^#[0-9a-f]{6}$/i.test(draft) ? draft : '#000000'}
             onChange={(e) => setDraft(e.target.value)}
             className="absolute inset-0 cursor-pointer opacity-0"
-            aria-label={`${def.label} : autre couleur`}
+            aria-label={`${def.label} : ${tr('autre couleur', 'other color')}`}
           />
         </label>
       </div>

@@ -12,5 +12,11 @@ export {
   toInstall,
   writeStatsApiIni
 } from './GameSetup'
-export { createGameHost, nullGameHost, GAME_PROCESS, LAUNCH_URLS } from './GameHost'
+export {
+  createGameHost,
+  nullGameHost,
+  GameCloseTimeoutError,
+  GAME_PROCESS,
+  LAUNCH_URLS
+} from './GameHost'
 export type { GameHost } from './GameHost'

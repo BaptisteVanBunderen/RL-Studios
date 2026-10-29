@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useApp } from '../appContext'
 import { MinusIcon, PlusIcon } from './icons'
 
 /** Interrupteur : orange allumé (pastille sombre à droite), gris éteint. */
@@ -164,6 +165,7 @@ export function Stepper({
   valueClassName?: string
   label: string
 }): React.JSX.Element {
+  const { tr } = useApp()
   const clamp = (n: number): number =>
     Math.min(max ?? Infinity, Math.max(min ?? -Infinity, Math.round(n * 1e6) / 1e6))
   const button =
@@ -173,7 +175,7 @@ export function Stepper({
       <button
         type="button"
         className={button}
-        aria-label={`${label} : diminuer`}
+        aria-label={`${label} : ${tr('diminuer', 'decrease')}`}
         disabled={min !== undefined && value <= min}
         onClick={() => onChange(clamp(value - step))}
       >
@@ -185,7 +187,7 @@ export function Stepper({
       <button
         type="button"
         className={button}
-        aria-label={`${label} : augmenter`}
+        aria-label={`${label} : ${tr('augmenter', 'increase')}`}
         disabled={max !== undefined && value >= max}
         onClick={() => onChange(clamp(value + step))}
       >

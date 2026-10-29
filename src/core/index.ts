@@ -80,6 +80,8 @@ export { buildCommandMessage } from './commands'
 export type { GameCommand } from './commands'
 export { resolveSettings, validateSettingValue } from './settings'
 export type { SettingCheck, SettingValue } from './settings'
+export { DEFAULT_LANGUAGE, LANGUAGES, detectLanguage, isLanguage, pick } from './language'
+export type { Language } from './language'
 export { SNAP_DISTANCE, moveRect, scaleFromDrag } from './editing'
 export { acceleratorFromKey, isValidAccelerator } from './accelerator'
 export type { KeyInput } from './accelerator'
@@ -93,6 +95,7 @@ export {
   configureStatsApiArgs,
   setGameDirArgs,
   setDisplayArgs,
+  setLanguageArgs,
   setGameHudArgs,
   setOverlaysVisibleArgs,
   setShortcutArgs,

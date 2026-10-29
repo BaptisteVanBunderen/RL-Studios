@@ -25,6 +25,14 @@ export const nullGameHost: GameHost = {
   }
 }
 
+/** Le jeu n'a pas quitté dans le délai : l'appelant (qui connaît la langue) formule le message. */
+export class GameCloseTimeoutError extends Error {
+  constructor() {
+    super('game close timeout')
+    this.name = 'GameCloseTimeoutError'
+  }
+}
+
 export const GAME_PROCESS = 'RocketLeague.exe'
 const STEAM_APP_ID = 252950
 
@@ -117,7 +125,7 @@ export function createGameHost(options: WindowsGameHostOptions): GameHost {
         await sleep(500)
         if (!(await isRunning())) return
       }
-      throw new Error('Le jeu ne se ferme pas : ferme-le toi-même puis réessaie.')
+      throw new GameCloseTimeoutError()
     },
 
     launch: (launcher) => options.openExternal(LAUNCH_URLS[launcher])

@@ -1,3 +1,4 @@
+import { pick, type Language } from './language'
 import type { MatchResult, MatchStats } from './match'
 
 /** Dernier résultat compté, tel que vu par les overlays. */
@@ -115,15 +116,36 @@ export class SessionStore {
    * La meilleure série ne baisse jamais et suit une série corrigée à la hausse. Le dernier
    * résultat et les GUID comptés ne changent pas. Renvoie `true` si quelque chose a changé.
    */
-  adjust(values: { wins?: number; losses?: number; streak?: number }): boolean {
+  adjust(
+    values: { wins?: number; losses?: number; streak?: number },
+    language: Language = 'fr'
+  ): boolean {
     const { wins, losses, streak } = values
     if (wins !== undefined && !isCount(wins))
-      throw new Error('Victoires : entier de 0 à 9999 attendu')
+      throw new Error(
+        pick(
+          language,
+          'Victoires : entier de 0 à 9999 attendu',
+          'Wins: integer from 0 to 9999 expected'
+        )
+      )
     if (losses !== undefined && !isCount(losses)) {
-      throw new Error('Défaites : entier de 0 à 9999 attendu')
+      throw new Error(
+        pick(
+          language,
+          'Défaites : entier de 0 à 9999 attendu',
+          'Losses: integer from 0 to 9999 expected'
+        )
+      )
     }
     if (streak !== undefined && !(Number.isInteger(streak) && Math.abs(streak) <= MAX_COUNT)) {
-      throw new Error('Série : entier de -9999 à 9999 attendu')
+      throw new Error(
+        pick(
+          language,
+          'Série : entier de -9999 à 9999 attendu',
+          'Streak: integer from -9999 to 9999 expected'
+        )
+      )
     }
 
     const before = JSON.stringify(this.session)

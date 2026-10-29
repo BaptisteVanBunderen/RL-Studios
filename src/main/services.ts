@@ -4,6 +4,10 @@ import {
   MIN_SCALE,
   StatsPipeline,
   deriveConnectionStatus,
+  DEFAULT_LANGUAGE,
+  isLanguage,
+  pick,
+  type Language,
   isValidPacketSendRate,
   parseModuleKey,
   positionSchema,
@@ -27,6 +31,7 @@ import {
   type Unsubscribe
 } from '@core/index'
 import {
+  GameCloseTimeoutError,
   GameConnection,
   nullGameHost,
   readStatsApiIni,
@@ -51,6 +56,8 @@ export interface ServicesOptions {
   getDisplays?: () => DisplayInfo[]
   overlayPort?: number
   gameWebPort?: number
+  /** Langue du système, utilisée tant que l'utilisateur n'en a pas choisi une. */
+  systemLanguage?: Language
   /** Processus, installation et lancement du jeu ; sans lui, un hôte inactif (tests). */
   gameHost?: GameHost
 }
@@ -73,6 +80,7 @@ export class Services {
   private readonly getDisplays: (() => DisplayInfo[]) | undefined
   private overlaysVisible = true
   private shortcutActive = false
+  private language: Language
   private readonly host: GameHost
   private linkConnected = false
   private processRunning = false
@@ -87,12 +95,14 @@ export class Services {
   private readonly packChanges = new Emitter<PacksSnapshot>()
   private readonly displayChanges = new Emitter<DisplayState>()
   private readonly overlayChanges = new Emitter<OverlaySettings>()
+  private readonly languageChanges = new Emitter<Language>()
 
   constructor(options: ServicesOptions) {
     this.getDisplays = options.getDisplays
     this.host = options.gameHost ?? nullGameHost
     this.config = new ConfigStore(options.configFile)
     this.configRecovered = this.config.load().recovered
+    this.language = this.config.config.language ?? options.systemLanguage ?? DEFAULT_LANGUAGE
     this.packs = new PackLoader(options.overlaysDir)
 
     const packSource: PackSource = {
@@ -168,6 +178,7 @@ export class Services {
       packs: this.packsSnapshot(),
       ...this.displayState(),
       overlays: this.overlaySettings(),
+      language: this.language,
       gamePort: this.gamePort,
       overlayBaseUrl: this.overlayBaseUrl()
     }
@@ -185,12 +196,16 @@ export class Services {
 
   async setModuleEnabled(key: string, enabled: boolean): Promise<PacksSnapshot> {
     const parsed = parseModuleKey(key)
-    if (!parsed) throw new Error(`Identifiant de module invalide : ${key}`)
+    if (!parsed)
+      throw new Error(
+        this.tr(`Identifiant de module invalide : ${key}`, `Invalid module identifier: ${key}`)
+      )
 
     const exists = this.packs
       .getPack(parsed.packId)
       ?.manifest.modules.some((m) => m.id === parsed.moduleId)
-    if (enabled && !exists) throw new Error(`Module introuvable : ${key}`)
+    if (enabled && !exists)
+      throw new Error(this.tr(`Module introuvable : ${key}`, `Module not found: ${key}`))
 
     if (enabled || this.config.config.modules[key]) {
       await this.config.update((c) => {
@@ -208,17 +223,27 @@ export class Services {
     const exists = parsed
       ? this.packs.getPack(parsed.packId)?.manifest.modules.some((m) => m.id === parsed.moduleId)
       : false
-    if (!exists) throw new Error(`Module introuvable : ${key}`)
+    if (!exists) throw new Error(this.tr(`Module introuvable : ${key}`, `Module not found: ${key}`))
 
     const { position, scale } = placement
     if (position && !positionSchema.safeParse(position).success) {
-      throw new Error('Position invalide (ancre connue, décalages numériques attendus)')
+      throw new Error(
+        this.tr(
+          'Position invalide (ancre connue, décalages numériques attendus)',
+          'Invalid position (known anchor and numeric offsets expected)'
+        )
+      )
     }
     if (
       typeof scale === 'number' &&
       !(Number.isFinite(scale) && scale >= MIN_SCALE && scale <= MAX_SCALE)
     ) {
-      throw new Error(`Échelle invalide : entre ${MIN_SCALE} et ${MAX_SCALE} attendu`)
+      throw new Error(
+        this.tr(
+          `Échelle invalide : entre ${MIN_SCALE} et ${MAX_SCALE} attendu`,
+          `Invalid scale: between ${MIN_SCALE} and ${MAX_SCALE} expected`
+        )
+      )
     }
 
     await this.config.update((c) => {
@@ -245,12 +270,24 @@ export class Services {
     const module = parsed
       ? this.packs.getPack(parsed.packId)?.manifest.modules.find((m) => m.id === parsed.moduleId)
       : undefined
-    if (!module) throw new Error(`Module introuvable : ${key}`)
+    if (!module) throw new Error(this.tr(`Module introuvable : ${key}`, `Module not found: ${key}`))
 
     const def = module.settings.find((s) => s.key === settingKey)
-    if (!def) throw new Error(`Réglage inconnu : ${key} › ${settingKey}`)
-    const check = validateSettingValue(def, value)
-    if (!check.ok) throw new Error(`Valeur refusée pour « ${def.label} » : ${check.error}`)
+    if (!def)
+      throw new Error(
+        this.tr(
+          `Réglage inconnu : ${key} › ${settingKey}`,
+          `Unknown setting: ${key} › ${settingKey}`
+        )
+      )
+    const check = validateSettingValue(def, value, this.language)
+    if (!check.ok)
+      throw new Error(
+        this.tr(
+          `Valeur refusée pour « ${def.label} » : ${check.error}`,
+          `Value rejected for "${def.label}": ${check.error}`
+        )
+      )
 
     await this.config.update((c) => {
       const current = c.modules[key]
@@ -270,7 +307,7 @@ export class Services {
   /** Active ou désactive TOUS les modules d'un pack en une seule écriture de config. */
   async setPackEnabled(packId: string, enabled: boolean): Promise<PacksSnapshot> {
     const pack = this.packs.getPack(packId)
-    if (!pack) throw new Error(`Pack introuvable : ${packId}`)
+    if (!pack) throw new Error(this.tr(`Pack introuvable : ${packId}`, `Pack not found: ${packId}`))
 
     const keys = pack.manifest.modules.map((m) => `${packId}/${m.id}`)
     await this.config.update((c) => {
@@ -282,12 +319,41 @@ export class Services {
     return this.publishPacks()
   }
 
+  // --- langue --------------------------------------------------------------------------------------
+
+  /** Le texte dans la langue de l'interface (messages d'erreur montrés à l'utilisateur). */
+  tr(fr: string, en: string): string {
+    return pick(this.language, fr, en)
+  }
+
+  /** Change la langue de l'interface : enregistrée et annoncée au client. */
+  async setLanguage(language: Language): Promise<Language> {
+    if (!isLanguage(language)) throw new Error(this.tr('Langue inconnue', 'Unknown language'))
+    if (language !== this.language) {
+      this.language = language
+      await this.config.update((c) => {
+        c.language = language
+      })
+      this.languageChanges.emit(language)
+    }
+    return language
+  }
+
+  onLanguage(listener: (language: Language) => void): Unsubscribe {
+    return this.languageChanges.on(listener)
+  }
+
   // --- écran et affichage global des overlays -----------------------------------------------------
 
   /** Choisit l'écran des overlays (`null` = principal) ; les fenêtres s'y replacent aussitôt. */
   async setDisplay(displayId: number | null): Promise<DisplayState> {
     if (displayId !== null && !this.allDisplays().some((d) => d.id === displayId)) {
-      throw new Error('Écran introuvable : il a peut-être été débranché.')
+      throw new Error(
+        this.tr(
+          'Écran introuvable : il a peut-être été débranché.',
+          'Display not found: it may have been unplugged.'
+        )
+      )
     }
     await this.config.update((c) => {
       c.displayId = displayId
@@ -315,7 +381,12 @@ export class Services {
   /** Change le raccourci global (`null` le supprime). Le processus principal l'enregistre. */
   async setShortcut(shortcut: string | null): Promise<OverlaySettings> {
     if (shortcut !== null && !isValidAccelerator(shortcut)) {
-      throw new Error('Raccourci invalide : un modificateur (Ctrl, Alt, Shift) et une touche.')
+      throw new Error(
+        this.tr(
+          'Raccourci invalide : un modificateur (Ctrl, Alt, Shift) et une touche.',
+          'Invalid shortcut: a modifier (Ctrl, Alt, Shift) and a key are required.'
+        )
+      )
     }
     await this.config.update((c) => {
       c.shortcut = shortcut
@@ -356,7 +427,10 @@ export class Services {
   async setGameDir(dir: string | null): Promise<GameSetupInfo> {
     if (dir !== null && !(await toInstall(dir))) {
       throw new Error(
-        'Ce dossier ne contient pas Rocket League (sous-dossier TAGame\\Config introuvable). Choisis le dossier qui contient « TAGame » et « Binaries ».'
+        this.tr(
+          'Ce dossier ne contient pas Rocket League (sous-dossier TAGame\\Config introuvable). Choisis le dossier qui contient « TAGame » et « Binaries ».',
+          'This folder does not contain Rocket League (TAGame\\Config subfolder not found). Choose the folder that contains "TAGame" and "Binaries".'
+        )
       )
     }
     await this.config.update((c) => {
@@ -368,29 +442,50 @@ export class Services {
   /** Active l'API (ou la désactive avec 0) dans l'ini ; le jeu doit ensuite être relancé. */
   async configureStatsApi(packetSendRate: number): Promise<GameSetupInfo> {
     if (!isValidPacketSendRate(packetSendRate)) {
-      throw new Error('Paquets par seconde : entier de 0 à 120 attendu')
+      throw new Error(
+        this.tr(
+          'Paquets par seconde : entier de 0 à 120 attendu',
+          'Packets per second: integer from 0 to 120 expected'
+        )
+      )
     }
     const install = await this.requireInstall()
-    await writeStatsApiIni(install.dir, { packetSendRate })
+    await writeStatsApiIni(install.dir, { packetSendRate }, this.language)
     return this.getGameSetup()
   }
 
   async restoreStatsApi(): Promise<GameSetupInfo> {
     const install = await this.requireInstall()
-    await restoreStatsApiIni(install.dir)
+    await restoreStatsApiIni(install.dir, this.language)
     return this.getGameSetup()
   }
 
   /** Ferme le jeu s'il tourne puis le relance par sa boutique (Steam ou Epic). */
   async restartGame(): Promise<void> {
-    if (this.restarting) throw new Error('Une relance est déjà en cours')
+    if (this.restarting)
+      throw new Error(this.tr('Une relance est déjà en cours', 'A restart is already in progress'))
     const install = await this.requireInstall()
     if (!install.launcher) {
-      throw new Error('Boutique du jeu inconnue (ni Steam ni Epic) : lance Rocket League toi-même.')
+      throw new Error(
+        this.tr(
+          'Boutique du jeu inconnue (ni Steam ni Epic) : lance Rocket League toi-même.',
+          'Unknown game store (neither Steam nor Epic): launch Rocket League yourself.'
+        )
+      )
     }
     this.restarting = true
     try {
-      await this.host.closeGame()
+      try {
+        await this.host.closeGame()
+      } catch (error) {
+        if (!(error instanceof GameCloseTimeoutError)) throw error
+        throw new Error(
+          this.tr(
+            'Le jeu ne se ferme pas : ferme-le toi-même puis réessaie.',
+            'The game does not close: close it yourself and try again.'
+          )
+        )
+      }
       await this.refreshProcess()
       await this.host.launch(install.launcher)
     } finally {
@@ -401,12 +496,18 @@ export class Services {
   /** Masque ou affiche le HUD natif du jeu (commande `SetHUDVisibility`). */
   setGameHud(visible: boolean): void {
     const sent = this.connection.send({ command: 'SetHUDVisibility', data: { bVisible: visible } })
-    if (!sent) throw new Error("Le jeu n'est pas connecté : impossible d'envoyer la commande.")
+    if (!sent)
+      throw new Error(
+        this.tr(
+          "Le jeu n'est pas connecté : impossible d'envoyer la commande.",
+          'The game is not connected: the command cannot be sent.'
+        )
+      )
   }
 
   /** Corrige les compteurs de la session à la main (boutons − / + du client). */
   adjustSession(values: SessionAdjustment): SessionState {
-    this.pipeline.adjustSession(values)
+    this.pipeline.adjustSession(values, this.language)
     return this.pipeline.session
   }
 
@@ -491,7 +592,12 @@ export class Services {
   private async requireInstall(): Promise<GameInstall> {
     const install = await this.chooseInstall(await this.host.detectInstalls())
     if (!install)
-      throw new Error('Installation de Rocket League introuvable : choisis son dossier.')
+      throw new Error(
+        this.tr(
+          'Installation de Rocket League introuvable : choisis son dossier.',
+          'Rocket League installation not found: choose its folder.'
+        )
+      )
     return install
   }
 

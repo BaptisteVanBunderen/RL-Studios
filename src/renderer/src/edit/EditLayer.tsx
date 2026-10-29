@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   moveRect,
   offsetFromPosition,
+  pick,
   placeInArea,
   scaleFromDrag,
   scaledSize,
@@ -71,6 +72,7 @@ export function EditLayer(): React.JSX.Element {
   if (error) return <p className="p-8 text-danger">{error}</p>
   if (!state) return <div />
 
+  const tr = (fr: string, en: string): string => pick(state.language, fr, en)
   const area = state.display.workArea
   const modules = state.packs.packs.flatMap((pack) => pack.modules.filter((m) => m.enabled))
 
@@ -178,7 +180,7 @@ export function EditLayer(): React.JSX.Element {
                 endGesture()
               }}
               onPointerCancel={endGesture}
-              title="Tirer pour redimensionner"
+              title={tr('Tirer pour redimensionner', 'Drag to resize')}
               className="absolute -right-2 -bottom-2 h-4 w-4 cursor-nwse-resize touch-none rounded-sm border-2 border-bg bg-accent"
             />
           </div>
@@ -188,15 +190,21 @@ export function EditLayer(): React.JSX.Element {
       <div className="absolute top-6 left-1/2 flex -translate-x-1/2 items-center gap-4 rounded-2xl border border-line bg-card px-5 py-3 text-sm text-text shadow-lg">
         <span>
           {modules.length === 0
-            ? 'Aucun overlay actif : active-en un dans le client.'
-            : 'Glisse un cadre pour déplacer, tire son coin pour redimensionner. Alt : sans aimantation.'}
+            ? tr(
+                'Aucun overlay actif : active-en un dans le client.',
+                'No active overlay: enable one in the client.'
+              )
+            : tr(
+                'Glisse un cadre pour déplacer, tire son coin pour redimensionner. Alt : sans aimantation.',
+                'Drag a frame to move it, drag its corner to resize. Alt: no snapping.'
+              )}
         </span>
         <button
           type="button"
           onClick={() => void window.rlstudio.stopEditMode()}
           className="cursor-pointer rounded-xl border border-accent bg-accent px-4 py-1.5 font-semibold text-bg hover:brightness-110"
         >
-          Terminé (Échap)
+          {tr('Terminé (Échap)', 'Done (Esc)')}
         </button>
       </div>
       {problem && (

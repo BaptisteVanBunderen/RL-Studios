@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/RL-Studio_logo.png?asset'
 import sdkSource from '../server/sdk/rlstudio.js?raw'
-import type { DisplayInfo } from '@core/index'
+import { detectLanguage, type DisplayInfo } from '@core/index'
 import { createGameHost } from '@game/index'
 import { registerIpc } from './ipc/register'
 import { Services } from './services'
@@ -128,6 +128,7 @@ async function start(): Promise<void> {
     overlaysDir: overlaysDir(),
     sdkSource,
     getDisplays: allDisplays,
+    systemLanguage: detectLanguage(app.getLocale()),
     gameHost: createGameHost({ openExternal: (url) => shell.openExternal(url) })
   })
   services = created
@@ -137,8 +138,11 @@ async function start(): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     dialog.showErrorBox(
-      'RL Studio ne peut pas démarrer',
-      `${message}\n\nFermez l'autre application qui utilise ce port, ou changez « overlayPort » dans :\n${created.config.path}`
+      created.tr('RL Studio ne peut pas démarrer', 'RL Studio cannot start'),
+      created.tr(
+        `${message}\n\nFermez l'autre application qui utilise ce port, ou changez « overlayPort » dans :\n${created.config.path}`,
+        `${message}\n\nClose the other application using this port, or change "overlayPort" in:\n${created.config.path}`
+      )
     )
     quit()
     return
@@ -148,8 +152,14 @@ async function start(): Promise<void> {
     void dialog.showMessageBox({
       type: 'warning',
       title: 'RL Studio',
-      message: 'Le fichier de configuration était illisible.',
-      detail: `Les réglages par défaut sont utilisés. L'ancien fichier est conservé dans :\n${created.config.path}.bak`
+      message: created.tr(
+        'Le fichier de configuration était illisible.',
+        'The configuration file was unreadable.'
+      ),
+      detail: created.tr(
+        `Les réglages par défaut sont utilisés. L'ancien fichier est conservé dans :\n${created.config.path}.bak`,
+        `Default settings are used. The old file is kept in:\n${created.config.path}.bak`
+      )
     })
   }
 

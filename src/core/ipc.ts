@@ -6,6 +6,7 @@ import { ID_PATTERN, positionSchema } from './manifest'
 import { isModuleKey, moduleKey, type PackScan } from './packs'
 import type { Rect } from './placement'
 import { isValidAccelerator } from './accelerator'
+import { LANGUAGES, type Language } from './language'
 import { isValidPacketSendRate, type GameSetupInfo } from './gameSetup'
 import type { ConnectionStatus } from './protocol'
 import type { SessionState } from './session'
@@ -95,6 +96,8 @@ export interface AppState {
   display: DisplayInfo
   displays: DisplayInfo[]
   overlays: OverlaySettings
+  /** Langue de l'interface. */
+  language: Language
   /** Port WebSocket de l'API du jeu auquel l'application se connecte (127.0.0.1). */
   gamePort: number
   /** `http://127.0.0.1:<port>` : base des URL d'overlay (« Copier l'URL OBS »). */
@@ -104,33 +107,35 @@ export interface AppState {
 /** Vue sérialisable des packs, avec l'état d'activation de chaque module. */
 export function toPacksSnapshot(scan: PackScan, config: Pick<AppConfig, 'modules'>): PacksSnapshot {
   return {
-    packs: scan.packs.map((pack) => ({
-      id: pack.id,
-      name: pack.manifest.name,
-      description: pack.manifest.description,
-      author: pack.manifest.author,
-      version: pack.manifest.version,
-      preview: pack.manifest.preview ?? null,
-      warnings: pack.warnings,
-      modules: pack.manifest.modules.map((module) => {
-        const key = moduleKey(pack.id, module.id)
-        return {
-          key,
-          id: module.id,
-          name: module.name,
-          description: module.description,
-          enabled: config.modules[key]?.enabled === true,
-          size: module.size,
-          position: config.modules[key]?.position ?? module.defaultPosition,
-          defaultPosition: module.defaultPosition,
-          scale: config.modules[key]?.scale ?? 1,
-          data: module.data,
-          category: module.category ?? null,
-          settings: module.settings,
-          values: resolveSettings(module, config.modules[key]?.settings)
-        }
-      })
-    })),
+    packs: scan.packs.map((pack) => {
+      return {
+        id: pack.id,
+        name: pack.manifest.name,
+        description: pack.manifest.description,
+        author: pack.manifest.author,
+        version: pack.manifest.version,
+        preview: pack.manifest.preview ?? null,
+        warnings: pack.warnings,
+        modules: pack.manifest.modules.map((module) => {
+          const key = moduleKey(pack.id, module.id)
+          return {
+            key,
+            id: module.id,
+            name: module.name,
+            description: module.description,
+            enabled: config.modules[key]?.enabled === true,
+            size: module.size,
+            position: config.modules[key]?.position ?? module.defaultPosition,
+            defaultPosition: module.defaultPosition,
+            scale: config.modules[key]?.scale ?? 1,
+            data: module.data,
+            category: module.category ?? null,
+            settings: module.settings,
+            values: resolveSettings(module, config.modules[key]?.settings)
+          }
+        })
+      }
+    }),
     invalid: scan.invalid.map((p) => ({ id: p.id, errors: p.errors }))
   }
 }
@@ -172,6 +177,7 @@ export interface InvokeMap {
   /** Ouvre la couche de placement à la souris par-dessus l'écran des overlays. */
   [IPC_INVOKE.startEditMode]: { args: []; result: void }
   [IPC_INVOKE.stopEditMode]: { args: []; result: void }
+  [IPC_INVOKE.setLanguage]: { args: [language: Language]; result: Language }
 }
 
 /** `null` rétablit la valeur du manifeste (position) ou 1 (échelle) ; absent = inchangé. */
@@ -194,6 +200,7 @@ export interface EventMap {
   [IPC_EVENTS.packs]: PacksSnapshot
   [IPC_EVENTS.display]: DisplayState
   [IPC_EVENTS.overlays]: OverlaySettings
+  [IPC_EVENTS.language]: Language
 }
 
 export type Unsubscribe = () => void
@@ -226,11 +233,13 @@ export interface RlStudioApi {
   setShortcut(shortcut: string | null): Promise<OverlaySettings>
   startEditMode(): Promise<void>
   stopEditMode(): Promise<void>
+  setLanguage(language: Language): Promise<Language>
   onConnection(listener: (status: ConnectionStatus) => void): Unsubscribe
   onSession(listener: (session: SessionState) => void): Unsubscribe
   onPacks(listener: (packs: PacksSnapshot) => void): Unsubscribe
   onDisplay(listener: (state: DisplayState) => void): Unsubscribe
   onOverlays(listener: (settings: OverlaySettings) => void): Unsubscribe
+  onLanguage(listener: (language: Language) => void): Unsubscribe
 }
 
 /**
@@ -290,3 +299,5 @@ export const setShortcutArgs = z.tuple([
     .refine(isValidAccelerator, { error: 'raccourci invalide (ex. Ctrl+Shift+F9)' })
     .nullable()
 ])
+
+export const setLanguageArgs = z.tuple([z.enum(LANGUAGES)])

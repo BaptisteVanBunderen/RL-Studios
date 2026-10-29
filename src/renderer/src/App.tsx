@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { detectLanguage, pick } from '@core/index'
 import { AppContext, type View } from './appContext'
 import { Sidebar } from './components/Sidebar'
 import { GameSettings } from './pages/GameSettings'
@@ -39,10 +40,16 @@ function App(): React.JSX.Element {
   const closeToast = useCallback(() => setToast(null), [])
 
   if (error) return <p className="p-8 text-danger">{error}</p>
-  if (!state) return <p className="p-8 text-sub">Chargement…</p>
+  if (!state) {
+    // la langue choisie n'est pas encore connue : celle du système
+    const loading = pick(detectLanguage(navigator.language), 'Chargement…', 'Loading…')
+    return <p className="p-8 text-sub">{loading}</p>
+  }
+
+  const tr = (fr: string, en: string): string => pick(state.language, fr, en)
 
   return (
-    <AppContext.Provider value={{ state, go: setView, report }}>
+    <AppContext.Provider value={{ state, go: setView, report, tr }}>
       <div className="flex h-full">
         <Sidebar view={view} />
         <main className="min-w-0 flex-1">

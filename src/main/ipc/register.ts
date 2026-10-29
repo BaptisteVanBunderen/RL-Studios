@@ -5,6 +5,7 @@ import {
   adjustSessionArgs,
   configureStatsApiArgs,
   setDisplayArgs,
+  setLanguageArgs,
   setOverlaysVisibleArgs,
   setShortcutArgs,
   setGameDirArgs,
@@ -88,7 +89,14 @@ export function registerIpc(services: Services, host: IpcHost): () => void {
   handle(IPC_INVOKE.openOverlaysFolder, async () => {
     // `openPath` renvoie un message d'erreur, ou une chaîne vide si tout va bien.
     const error = await shell.openPath(services.packs.dir)
-    if (error) throw new Error(`Impossible d'ouvrir le dossier des overlays : ${error}`)
+    if (error) {
+      throw new Error(
+        services.tr(
+          `Impossible d'ouvrir le dossier des overlays : ${error}`,
+          `Cannot open the overlays folder: ${error}`
+        )
+      )
+    }
   })
 
   const parse = <T>(
@@ -141,6 +149,9 @@ export function registerIpc(services: Services, host: IpcHost): () => void {
     host.startEdit()
   })
   handle(IPC_INVOKE.stopEditMode, () => host.stopEdit())
+  handle(IPC_INVOKE.setLanguage, (...args) =>
+    services.setLanguage(parse(setLanguageArgs, args, IPC_INVOKE.setLanguage)[0])
+  )
 
   const push = <K extends keyof EventMap>(channel: K, payload: EventMap[K]): void => {
     for (const window of host.clientWindows()) {
@@ -152,7 +163,8 @@ export function registerIpc(services: Services, host: IpcHost): () => void {
     services.onSession((session) => push(IPC_EVENTS.session, session)),
     services.onPacks((packs) => push(IPC_EVENTS.packs, packs)),
     services.onDisplay((state) => push(IPC_EVENTS.display, state)),
-    services.onOverlays((settings) => push(IPC_EVENTS.overlays, settings))
+    services.onOverlays((settings) => push(IPC_EVENTS.overlays, settings)),
+    services.onLanguage((language) => push(IPC_EVENTS.language, language))
   ]
 
   return () => {

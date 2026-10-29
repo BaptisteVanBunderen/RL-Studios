@@ -13,6 +13,8 @@ interface AppContextValue {
   go: (view: View) => void
   /** Affiche une erreur à l'utilisateur (action refusée par le processus principal…). */
   report: (error: unknown) => void
+  /** Le texte dans la langue de l'interface : `tr('Bonjour', 'Hello')`. */
+  tr: (fr: string, en: string) => string
 }
 
 export const AppContext = createContext<AppContextValue | null>(null)

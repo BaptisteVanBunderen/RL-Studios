@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { ChevronLeftIcon } from './icons'
+import { useApp } from '../appContext'
 import { IconButton } from './ui'
 
 /** En-tête commun : bouton retour facultatif, titre, sous-titre, actions à droite. */
@@ -14,10 +15,11 @@ export function PageHeader({
   onBack?: () => void
   children?: ReactNode
 }): React.JSX.Element {
+  const { tr } = useApp()
   return (
     <header className="flex items-center gap-4 border-b border-line px-8 py-5">
       {onBack && (
-        <IconButton label="Retour" onClick={onBack}>
+        <IconButton label={tr('Retour', 'Back')} onClick={onBack}>
           <ChevronLeftIcon />
         </IconButton>
       )}

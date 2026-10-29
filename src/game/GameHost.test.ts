@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createGameHost, LAUNCH_URLS } from './GameHost'
+import { createGameHost, GameCloseTimeoutError, LAUNCH_URLS } from './GameHost'
 
 const win = process.platform === 'win32'
 
@@ -38,7 +38,7 @@ describe('createGameHost', () => {
   })
 
   it.runIf(win)('échoue si le jeu ne se ferme pas', async () => {
-    await expect(host(() => true).closeGame()).rejects.toThrow(/ne se ferme pas/)
+    await expect(host(() => true).closeGame()).rejects.toThrow(GameCloseTimeoutError)
   })
 
   it('lance via l’URL de la boutique', async () => {

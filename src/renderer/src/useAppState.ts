@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AppState } from '@core/index'
+import { detectLanguage, pick, type AppState } from '@core/index'
 
 /**
  * État de l'application côté client : un instantané au chargement, puis les notifications du
@@ -9,7 +9,13 @@ export function useAppState(): { state: AppState | null; error: string | null } 
   const [state, setState] = useState<AppState | null>(null)
   // Valeur initiale calculée à la création : l'absence du preload n'est pas un changement d'état.
   const [error, setError] = useState<string | null>(() =>
-    window.rlstudio ? null : "L'API du processus principal est indisponible (preload non chargé)."
+    window.rlstudio
+      ? null
+      : pick(
+          detectLanguage(navigator.language),
+          "L'API du processus principal est indisponible (preload non chargé).",
+          'The main process API is unavailable (preload not loaded).'
+        )
   )
 
   useEffect(() => {
@@ -31,7 +37,8 @@ export function useAppState(): { state: AppState | null; error: string | null } 
       api.onSession((session) => setState((s) => (s ? { ...s, session } : s))),
       api.onPacks((packs) => setState((s) => (s ? { ...s, packs } : s))),
       api.onDisplay((d) => setState((s) => (s ? { ...s, ...d } : s))),
-      api.onOverlays((overlays) => setState((s) => (s ? { ...s, overlays } : s)))
+      api.onOverlays((overlays) => setState((s) => (s ? { ...s, overlays } : s))),
+      api.onLanguage((language) => setState((s) => (s ? { ...s, language } : s)))
     ]
     return () => {
       alive = false

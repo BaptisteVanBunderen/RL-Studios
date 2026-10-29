@@ -1,3 +1,5 @@
+import { useApp } from '../appContext'
+
 /**
  * Aperçu en direct d'un module : la VRAIE page de l'overlay, servie par le serveur local, dans une
  * iframe. Elle reçoit les mêmes données et les mêmes réglages (mise à jour à chaud comprise) que
@@ -20,6 +22,7 @@ export function LivePreview({
   fitWidth: number
   fitHeight: number
 }): React.JSX.Element {
+  const { tr } = useApp()
   const factor = Math.min(scale, fitWidth / width, fitHeight / height)
 
   return (
@@ -29,7 +32,7 @@ export function LivePreview({
     >
       <iframe
         src={src}
-        title="Aperçu en direct"
+        title={tr('Aperçu en direct', 'Live preview')}
         // La page tourne sur l'origine du serveur d'overlays, pas sur celle du client : même isolement
         // qu'une source OBS. `allow-same-origin` est nécessaire pour que son WebSocket soit accepté
         // (en-tête Origin du serveur local) ; elle n'a aucun accès au client.

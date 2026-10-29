@@ -2,6 +2,8 @@ import { access, copyFile, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   applyStatsApiIni,
+  pick,
+  type Language,
   launcherFromPath,
   parseStatsApiIni,
   type GameInstall,
@@ -140,38 +142,59 @@ export async function readStatsApiIni(gameDir: string): Promise<StatsApiIni> {
  */
 export async function writeStatsApiIni(
   gameDir: string,
-  change: StatsApiChange
+  change: StatsApiChange,
+  language: Language = 'fr'
 ): Promise<StatsApiIni> {
   const path = await locateIni(gameDir)
-  if (!path) throw new Error("Fichier de configuration de l'API introuvable dans TAGame\\Config.")
+  if (!path) {
+    throw new Error(
+      pick(
+        language,
+        "Fichier de configuration de l'API introuvable dans TAGame\\Config.",
+        'API configuration file not found in TAGame\\Config.'
+      )
+    )
+  }
 
   const backup = path + BACKUP_SUFFIX
   try {
     if (!(await exists(backup))) await copyFile(path, backup)
     await writeFile(path, applyStatsApiIni(await readFile(path, 'utf8'), change), 'utf8')
   } catch (error) {
-    throw new Error(explainFsError(error, path))
+    throw new Error(explainFsError(error, path, language))
   }
   return readStatsApiIni(gameDir)
 }
 
-export async function restoreStatsApiIni(gameDir: string): Promise<StatsApiIni> {
+export async function restoreStatsApiIni(
+  gameDir: string,
+  language: Language = 'fr'
+): Promise<StatsApiIni> {
   const path = await locateIni(gameDir)
   if (!path || !(await exists(path + BACKUP_SUFFIX))) {
-    throw new Error('Aucune sauvegarde à restaurer.')
+    throw new Error(pick(language, 'Aucune sauvegarde à restaurer.', 'No backup to restore.'))
   }
   try {
     await copyFile(path + BACKUP_SUFFIX, path)
   } catch (error) {
-    throw new Error(explainFsError(error, path))
+    throw new Error(explainFsError(error, path, language))
   }
   return readStatsApiIni(gameDir)
 }
 
-function explainFsError(error: unknown, path: string): string {
+function explainFsError(error: unknown, path: string, language: Language): string {
   const code = (error as NodeJS.ErrnoException)?.code
   if (code === 'EPERM' || code === 'EACCES') {
-    return `Écriture refusée dans ${path} : relance RL Studio en administrateur, ou autorise l'écriture dans ce dossier.`
+    return pick(
+      language,
+      `Écriture refusée dans ${path} : relance RL Studio en administrateur, ou autorise l'écriture dans ce dossier.`,
+      `Write denied in ${path}: restart RL Studio as administrator, or allow writing in that folder.`
+    )
   }
-  return `Impossible de modifier ${path} : ${error instanceof Error ? error.message : String(error)}`
+  const reason = error instanceof Error ? error.message : String(error)
+  return pick(
+    language,
+    `Impossible de modifier ${path} : ${reason}`,
+    `Cannot modify ${path}: ${reason}`
+  )
 }
