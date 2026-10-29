@@ -1,0 +1,68 @@
+{
+  "manifestVersion": 1,
+  "name": "Scoreboard",
+  "description": "Tableau de score du match en cours : score des équipes, chrono et statistiques de chaque joueur",
+  "author": "THEVBAT",
+  "version": "1.0.0",
+  "modules": [
+    {
+      "id": "board",
+      "name": "Tableau de score",
+      "description": "Équipes bleue et orange, joueurs triés par score, avec buts, passes décisives, arrêts et tirs",
+      "category": "match",
+      "entry": "modules/board.html",
+      "size": { "width": 460, "height": 290 },
+      "defaultPosition": { "anchor": "left", "x": 20, "y": 0 },
+      "data": ["match"],
+      "settings": [
+        {
+          "key": "showTimer",
+          "type": "boolean",
+          "label": "Afficher le chrono",
+          "default": true
+        },
+        {
+          "key": "showStats",
+          "type": "boolean",
+          "label": "Afficher les statistiques des joueurs",
+          "description": "Buts, passes décisives, arrêts et tirs. Désactivé : seul le score de chaque joueur reste.",
+          "default": true
+        },
+        {
+          "key": "highlightMe",
+          "type": "boolean",
+          "label": "Mettre mon nom en évidence",
+          "default": true
+        },
+        {
+          "key": "hideOutsideMatch",
+          "type": "boolean",
+          "label": "Masquer hors d'un match",
+          "default": true
+        },
+        {
+          "key": "blueColor",
+          "type": "color",
+          "label": "Couleur de l'équipe bleue",
+          "default": "#3b9ce0"
+        },
+        {
+          "key": "orangeColor",
+          "type": "color",
+          "label": "Couleur de l'équipe orange",
+          "default": "#e96f22"
+        },
+        {
+          "key": "bgOpacity",
+          "type": "range",
+          "label": "Opacité du fond",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "unit": "%",
+          "default": 0.88
+        }
+      ]
+    }
+  ]
+}

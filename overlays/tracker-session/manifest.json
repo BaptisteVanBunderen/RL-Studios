@@ -1,0 +1,60 @@
+{
+  "manifestVersion": 1,
+  "name": "Session Bar",
+  "description": "Winrate, victoires, défaites, série et meilleure série en temps réel",
+  "author": "THEVBAT",
+  "version": "1.0.0",
+  "modules": [
+    {
+      "id": "bar-slice",
+      "name": "Session Bar",
+      "description": "Bandeau compact pour le haut de l'écran : winrate, victoires, défaites, série, meilleure série",
+      "category": "session",
+      "entry": "modules/bar-slice.html",
+      "size": { "width": 425, "height": 47 },
+      "defaultPosition": { "anchor": "top-right", "x": 20, "y": 0 },
+      "data": ["session"],
+      "settings": [
+        {
+          "key": "showWinrate",
+          "type": "boolean",
+          "label": "Afficher le winrate",
+          "default": true
+        },
+        {
+          "key": "showBest",
+          "type": "boolean",
+          "label": "Afficher la meilleure série",
+          "default": true
+        },
+        {
+          "key": "showLossStreak",
+          "type": "boolean",
+          "label": "Afficher la série de défaites",
+          "description": "Quand tu perds plusieurs matchs d'affilée, la case de série passe en rouge.",
+          "default": true
+        },
+        {
+          "key": "goodWinrate",
+          "type": "number",
+          "label": "Winrate « vert » à partir de",
+          "min": 0,
+          "max": 100,
+          "step": 5,
+          "unit": "%",
+          "default": 60
+        },
+        {
+          "key": "bgOpacity",
+          "type": "range",
+          "label": "Opacité du fond",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "unit": "%",
+          "default": 0.93
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,248 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Session Bar</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap');
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      html,
+      body {
+        background: transparent;
+        width: 100%;
+        height: 100%;
+        font-family: 'Rajdhani', 'Arial Narrow', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        overflow: hidden;
+      }
+      /* La barre remplit la fenêtre : celle-ci fait la taille du manifeste × l'échelle choisie. */
+      #bar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        background: rgba(12, 12, 18, var(--bg-opacity, 0.93));
+        clip-path: polygon(0% 0%, 100% 0%, calc(100% - 22px) 100%, 22px 100%);
+        padding: 0 44px;
+      }
+      .cell {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 0 12px;
+        height: 100%;
+        position: relative;
+      }
+      .cell:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 15%;
+        height: 70%;
+        width: 1px;
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .icon {
+        font-size: 16px;
+        line-height: 1;
+      }
+      .value {
+        font-size: 20px;
+        font-weight: 700;
+        color: #fff;
+        min-width: 18px;
+        letter-spacing: 0.02em;
+      }
+      #wins-val {
+        color: #4cdb8a;
+      }
+      #losses-val {
+        color: #ff4444;
+      }
+      #streak-val {
+        color: #ffb800;
+      }
+      #streak-val.loss {
+        color: #ff4444;
+      }
+      #best-val {
+        color: #cc88ff;
+      }
+      @keyframes pop {
+        0% {
+          transform: scale(1.45);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      .pop {
+        animation: pop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+      .zero {
+        opacity: 0.3;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <div class="cell" id="cell-winrate">
+        <svg width="38" height="38" viewBox="0 0 38 38">
+          <circle
+            cx="19"
+            cy="19"
+            r="15"
+            fill="none"
+            stroke="rgba(255,255,255,0.1)"
+            stroke-width="3"
+          />
+          <circle
+            id="ring-fill"
+            cx="19"
+            cy="19"
+            r="15"
+            fill="none"
+            stroke="#4cdb8a"
+            stroke-width="3"
+            stroke-dasharray="94.2"
+            stroke-dashoffset="94.2"
+            stroke-linecap="round"
+            transform="rotate(-90 19 19)"
+          />
+          <text
+            id="ring-text"
+            x="19"
+            y="23"
+            text-anchor="middle"
+            fill="#fff"
+            font-size="11"
+            font-weight="700"
+            font-family="'Rajdhani','Arial Narrow',Arial,sans-serif"
+          >
+            –%
+          </text>
+        </svg>
+      </div>
+      <div class="cell">
+        <span class="icon">🏆</span>
+        <span class="value" id="wins-val">0</span>
+      </div>
+      <div class="cell">
+        <span class="icon">❌</span>
+        <span class="value" id="losses-val">0</span>
+      </div>
+      <div class="cell">
+        <span class="icon" id="streak-icon">🔥</span>
+        <span class="value zero" id="streak-val">0</span>
+      </div>
+      <div class="cell" id="cell-best">
+        <span class="icon">⭐</span>
+        <span class="value" id="best-val">0</span>
+      </div>
+    </div>
+
+    <!-- Le SDK de RL Studio : se connecte tout seul et fournit RLStudio.on(...) -->
+    <script src="/sdk/rlstudio.js"></script>
+    <script>
+      const CIRCUMFERENCE = 2 * Math.PI * 15
+
+      const $bar = document.getElementById('bar')
+      const $ringFill = document.getElementById('ring-fill')
+      const $ringText = document.getElementById('ring-text')
+      const $wins = document.getElementById('wins-val')
+      const $losses = document.getElementById('losses-val')
+      const $streak = document.getElementById('streak-val')
+      const $sicon = document.getElementById('streak-icon')
+      const $best = document.getElementById('best-val')
+
+      // Valeurs du manifeste, remplacées dès que RL Studio envoie les réglages de l'utilisateur.
+      let settings = {
+        showWinrate: true,
+        showBest: true,
+        showLossStreak: true,
+        goodWinrate: 60,
+        bgOpacity: 0.93
+      }
+      let session = { wins: 0, losses: 0, streak: 0, bestStreak: 0 }
+
+      function pop(el) {
+        el.classList.remove('pop')
+        void el.offsetWidth
+        el.classList.add('pop')
+      }
+
+      // Met à jour un compteur ; l'animation ne joue que si la valeur a vraiment changé.
+      function setValue(el, value) {
+        const text = String(value)
+        if (el.textContent === text) return
+        el.textContent = text
+        pop(el)
+      }
+
+      function setRing(pct) {
+        if (pct === null) {
+          $ringFill.style.strokeDashoffset = CIRCUMFERENCE
+          $ringText.textContent = '–%'
+          return
+        }
+        $ringFill.style.transition = 'stroke-dashoffset 0.4s ease'
+        $ringFill.style.strokeDashoffset = CIRCUMFERENCE * (1 - pct / 100)
+        // vert à partir du seuil choisi, orange 15 points en dessous, rouge ensuite
+        $ringFill.style.stroke =
+          pct >= settings.goodWinrate
+            ? '#4cdb8a'
+            : pct >= settings.goodWinrate - 15
+              ? '#ffb800'
+              : '#ff4444'
+        $ringText.textContent = pct + '%'
+      }
+
+      function render() {
+        const total = session.wins + session.losses
+        setRing(total > 0 ? Math.round((session.wins / total) * 100) : null)
+        setValue($wins, session.wins)
+        setValue($losses, session.losses)
+        setValue($best, session.bestStreak)
+        // `streak` est signée : positive = victoires d'affilée, négative = défaites d'affilée.
+        // On est toujours dans l'un ou l'autre cas, d'où une seule case.
+        const losing = session.streak < 0 && settings.showLossStreak
+        const count = losing ? -session.streak : Math.max(session.streak, 0)
+        $streak.textContent = count
+        $streak.classList.toggle('zero', count === 0)
+        $streak.classList.toggle('loss', losing)
+        $sicon.textContent = losing
+          ? count >= 5
+            ? '💀'
+            : '❄️'
+          : count >= 5
+            ? '🔥'
+            : count > 0
+              ? '⚡'
+              : '🔥'
+      }
+
+      RLStudio.on('settings', function (values) {
+        settings = values
+        document.getElementById('cell-winrate').hidden = !values.showWinrate
+        document.getElementById('cell-best').hidden = !values.showBest
+        $bar.style.setProperty('--bg-opacity', values.bgOpacity)
+        render() // le seuil de couleur du winrate a pu changer
+      })
+
+      RLStudio.on('session', function (s) {
+        session = s
+        render()
+      })
+    </script>
+  </body>
+</html>

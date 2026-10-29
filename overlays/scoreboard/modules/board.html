@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tableau de score</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      :root {
+        --blue: #3b9ce0;
+        --orange: #e96f22;
+        --bg-opacity: 0.88;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        color: #fff;
+      }
+      /* Le tableau remplit la fenêtre : celle-ci fait la taille du manifeste × l'échelle choisie. */
+      #board {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        border-radius: 10px;
+        overflow: hidden;
+        background: rgba(10, 13, 18, var(--bg-opacity));
+        font-variant-numeric: tabular-nums;
+      }
+      #head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 54px;
+        padding: 0 18px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .total {
+        font-size: 34px;
+        font-weight: 800;
+        line-height: 1;
+      }
+      #blue-total {
+        color: var(--blue);
+      }
+      #orange-total {
+        color: var(--orange);
+      }
+      #clock {
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-align: center;
+      }
+      #clock small {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #ffb800;
+      }
+      .team {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border-left: 4px solid var(--team);
+      }
+      #blue {
+        --team: var(--blue);
+      }
+      #orange {
+        --team: var(--orange);
+      }
+      .row {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr repeat(5, 44px);
+        align-items: center;
+        gap: 0;
+        padding: 0 14px 0 12px;
+        font-size: 15px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .row.legend {
+        flex: 0 0 22px;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.45);
+      }
+      .row > span {
+        text-align: right;
+      }
+      .row > .name {
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .row.me {
+        background: rgba(255, 255, 255, 0.1);
+        font-weight: 700;
+      }
+      .row .score {
+        font-weight: 700;
+        color: var(--team);
+      }
+      .nostats .row {
+        grid-template-columns: 1fr 54px;
+      }
+      .nostats .stat {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="board" hidden>
+      <div id="head">
+        <span id="blue-total" class="total">0</span>
+        <div id="clock">0:00</div>
+        <span id="orange-total" class="total">0</span>
+      </div>
+      <div id="blue" class="team"></div>
+      <div id="orange" class="team"></div>
+    </div>
+
+    <!-- Le SDK de RL Studio : se connecte tout seul et fournit RLStudio.on(...) -->
+    <script src="/sdk/rlstudio.js"></script>
+    <script>
+      var $board = document.getElementById('board')
+      var $clock = document.getElementById('clock')
+      var $totals = [document.getElementById('blue-total'), document.getElementById('orange-total')]
+      var $teams = [document.getElementById('blue'), document.getElementById('orange')]
+
+      // Valeurs du manifeste, remplacées dès que RL Studio envoie les réglages de l'utilisateur.
+      var settings = {
+        showTimer: true,
+        showStats: true,
+        highlightMe: true,
+        hideOutsideMatch: true,
+        blueColor: '#3b9ce0',
+        orangeColor: '#e96f22',
+        bgOpacity: 0.88
+      }
+      var match = null
+
+      var COLUMNS = [
+        ['Joueur', null],
+        ['Score', 'score'],
+        ['B', 'goals'],
+        ['A', 'assists'],
+        ['Arr.', 'saves'],
+        ['T', 'shots']
+      ]
+
+      // replaceChildren() n'existe pas dans les vieux navigateurs d'OBS
+      function clear(el) {
+        while (el.firstChild) el.removeChild(el.firstChild)
+      }
+
+      function cell(className, text) {
+        var el = document.createElement('span')
+        el.className = className
+        el.textContent = text // jamais innerHTML : les noms viennent du jeu
+        return el
+      }
+
+      function legend() {
+        var row = document.createElement('div')
+        row.className = 'row legend'
+        COLUMNS.forEach(function (c, i) {
+          row.appendChild(cell(i === 0 ? 'name' : i === 1 ? 'score-h' : 'stat', c[0]))
+        })
+        return row
+      }
+
+      function playerRow(player, isMe) {
+        var row = document.createElement('div')
+        row.className = 'row' + (isMe ? ' me' : '')
+        row.appendChild(cell('name', player.name))
+        COLUMNS.slice(1).forEach(function (c, i) {
+          row.appendChild(cell(i === 0 ? 'score' : 'stat', String(player[c[1]])))
+        })
+        return row
+      }
+
+      function formatClock(match) {
+        var total = Math.max(0, Math.floor(match.timeSeconds))
+        var m = Math.floor(total / 60)
+        var s = total % 60
+        return m + ':' + (s < 10 ? '0' : '') + s
+      }
+
+      function render() {
+        var visible = match !== null || !settings.hideOutsideMatch
+        $board.hidden = !visible
+        $board.classList.toggle('nostats', !settings.showStats)
+        $clock.hidden = !settings.showTimer
+        if (!match) {
+          $totals[0].textContent = '0'
+          $totals[1].textContent = '0'
+          $teams.forEach(function (el) {
+            clear(el)
+          })
+          return
+        }
+
+        clear($clock)
+        $clock.appendChild(document.createTextNode(formatClock(match)))
+        if (match.overtime) {
+          var small = document.createElement('small')
+          small.textContent = 'Prolongation'
+          $clock.appendChild(small)
+        } else if (match.status === 'ended') {
+          var done = document.createElement('small')
+          done.textContent = 'Terminé'
+          $clock.appendChild(done)
+        }
+
+        // Équipe 0 = bleue, équipe 1 = orange. Le score d'équipe vient de Game.Teams[].Score.
+        ;[0, 1].forEach(function (teamNum) {
+          var team = match.teams.find(function (t) {
+            return t.teamNum === teamNum
+          })
+          $totals[teamNum].textContent = team ? team.score : 0
+
+          var players = match.players
+            .filter(function (p) {
+              return p.teamNum === teamNum
+            })
+            .sort(function (a, b) {
+              return b.score - a.score
+            })
+          var container = $teams[teamNum]
+          clear(container)
+          container.appendChild(legend())
+          players.forEach(function (p) {
+            var isMe = settings.highlightMe && p.primaryId === match.localPlayerId
+            container.appendChild(playerRow(p, isMe))
+          })
+        })
+      }
+
+      RLStudio.on('settings', function (values) {
+        settings = values
+        var root = document.documentElement.style
+        root.setProperty('--blue', values.blueColor)
+        root.setProperty('--orange', values.orangeColor)
+        root.setProperty('--bg-opacity', values.bgOpacity)
+        render()
+      })
+
+      RLStudio.on('match', function (m) {
+        match = m
+        render()
+      })
+    </script>
+  </body>
+</html>

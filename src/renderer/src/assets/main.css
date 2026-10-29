@@ -1,0 +1,69 @@
+@import 'tailwindcss';
+
+/* Direction graphique A de la maquette : fond sombre, bleu et orange du logo.
+   Bleu = victoires et états sains ; orange = actions et série.
+   Les polices Archivo / IBM Plex sont celles de la maquette, avec repli sur des polices système
+   en attendant de les embarquer (l'application doit fonctionner hors ligne). */
+@theme {
+  --color-bg: #0c0f14;
+  --color-side: #080b10;
+  --color-card: #131a24;
+  --color-tile: #0a0d12;
+  --color-line: #1e2733;
+  --color-line-hover: #2b3748;
+  --color-tag: #1b2330;
+  --color-field: #0a0d12;
+  --color-text: #f1f4f9;
+  --color-sub: #8b94a5;
+  --color-mute: #6b7383;
+  --color-accent: #e96f22;
+  --color-blue: #3b9ce0;
+  --color-pill: #0e1c29;
+  --color-pill-line: #14283b;
+  --color-pill-text: #7fc4f0;
+  --color-warn: #f0b429;
+  --color-danger: #ef6a6a;
+  --font-sans: 'Archivo', 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Barres de défilement discrètes, assorties au thème */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-hover) transparent;
+}
+
+input[type='range'] {
+  accent-color: var(--color-accent);
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* Couche de placement à la souris : fenêtre transparente, le fond est dessiné par la page. */
+html.edit-layer,
+html.edit-layer body,
+html.edit-layer #root {
+  background: transparent !important;
+}

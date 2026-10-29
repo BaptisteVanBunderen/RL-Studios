@@ -1,0 +1,303 @@
+import { z } from 'zod'
+import type { AppConfig } from './config'
+import { IPC_EVENTS, IPC_INVOKE } from './ipcChannels'
+import type { ManifestTopic, ModuleCategory, Position, SettingDefinition } from './manifest'
+import { ID_PATTERN, positionSchema } from './manifest'
+import { isModuleKey, moduleKey, type PackScan } from './packs'
+import type { Rect } from './placement'
+import { isValidAccelerator } from './accelerator'
+import { LANGUAGES, type Language } from './language'
+import { isValidPacketSendRate, type GameSetupInfo } from './gameSetup'
+import type { ConnectionStatus } from './protocol'
+import type { SessionState } from './session'
+import { resolveSettings, type SettingValue } from './settings'
+
+export { IPC_EVENTS, IPC_INVOKE }
+
+/**
+ * Types partagés entre le processus principal, le preload et le client React.
+ * Tout ce qui traverse l'IPC doit être sérialisable (pas de chemins absolus, pas de classes).
+ */
+
+export interface ModuleSummary {
+  /** `<pack>/<module>`. */
+  key: string
+  id: string
+  name: string
+  description: string
+  enabled: boolean
+  size: { width: number; height: number }
+  /** Position effective : celle de l'utilisateur, sinon celle du manifeste. */
+  position: Position
+  /** Position du manifeste (pour « rétablir »). */
+  defaultPosition: Position
+  /** Échelle effective (1 = taille de référence). */
+  scale: number
+  data: ManifestTopic[]
+  /** Genre déclaré par le module ; `null` s'il n'en déclare pas. */
+  category: ModuleCategory | null
+  settings: SettingDefinition[]
+  /** Valeur effective de chaque réglage : celle de l'utilisateur si valide, sinon le défaut. */
+  values: Record<string, SettingValue>
+}
+
+export interface PackSummary {
+  id: string
+  name: string
+  description: string
+  author: string
+  version: string
+  /** Chemin de l'aperçu relatif au pack (servi à `/overlay/<pack>/<preview>`). */
+  preview: string | null
+  warnings: string[]
+  modules: ModuleSummary[]
+}
+
+/** Dossier présent dans `overlays/` mais non chargé : affiché avec ses erreurs. */
+export interface InvalidPackSummary {
+  id: string
+  errors: string[]
+}
+
+export interface PacksSnapshot {
+  packs: PackSummary[]
+  invalid: InvalidPackSummary[]
+}
+
+/** Un écran, tel que proposé dans le choix de l'écran des overlays. */
+export interface DisplayInfo {
+  /** Identifiant d'Electron ; stable tant que l'écran reste branché. */
+  id: number
+  /** Texte affiché, ex. « Principal — 2560 × 1440 ». */
+  label: string
+  /** Zone utilisable (hors barre des tâches), en pixels logiques. */
+  workArea: Rect
+}
+
+/** Écrans disponibles et celui où s'affichent les overlays. */
+export interface DisplayState {
+  display: DisplayInfo
+  displays: DisplayInfo[]
+}
+
+/** Affichage global des overlays : interrupteur (raccourci) et état du raccourci. */
+export interface OverlaySettings {
+  visible: boolean
+  /** Raccourci demandé (format Electron) ; `null` = aucun. */
+  shortcut: string | null
+  /** `false` si le système a refusé le raccourci (déjà pris par une autre application). */
+  shortcutActive: boolean
+}
+
+export interface AppState {
+  connection: ConnectionStatus
+  session: SessionState
+  packs: PacksSnapshot
+  display: DisplayInfo
+  displays: DisplayInfo[]
+  overlays: OverlaySettings
+  /** Langue de l'interface. */
+  language: Language
+  /** Port WebSocket de l'API du jeu auquel l'application se connecte (127.0.0.1). */
+  gamePort: number
+  /** `http://127.0.0.1:<port>` : base des URL d'overlay (« Copier l'URL OBS »). */
+  overlayBaseUrl: string
+}
+
+/** Vue sérialisable des packs, avec l'état d'activation de chaque module. */
+export function toPacksSnapshot(scan: PackScan, config: Pick<AppConfig, 'modules'>): PacksSnapshot {
+  return {
+    packs: scan.packs.map((pack) => {
+      return {
+        id: pack.id,
+        name: pack.manifest.name,
+        description: pack.manifest.description,
+        author: pack.manifest.author,
+        version: pack.manifest.version,
+        preview: pack.manifest.preview ?? null,
+        warnings: pack.warnings,
+        modules: pack.manifest.modules.map((module) => {
+          const key = moduleKey(pack.id, module.id)
+          return {
+            key,
+            id: module.id,
+            name: module.name,
+            description: module.description,
+            enabled: config.modules[key]?.enabled === true,
+            size: module.size,
+            position: config.modules[key]?.position ?? module.defaultPosition,
+            defaultPosition: module.defaultPosition,
+            scale: config.modules[key]?.scale ?? 1,
+            data: module.data,
+            category: module.category ?? null,
+            settings: module.settings,
+            values: resolveSettings(module, config.modules[key]?.settings)
+          }
+        })
+      }
+    }),
+    invalid: scan.invalid.map((p) => ({ id: p.id, errors: p.errors }))
+  }
+}
+
+/** Requêtes client → main : arguments et résultat de chaque canal. */
+export interface InvokeMap {
+  [IPC_INVOKE.getState]: { args: []; result: AppState }
+  [IPC_INVOKE.reloadPacks]: { args: []; result: PacksSnapshot }
+  [IPC_INVOKE.setModuleEnabled]: {
+    args: [moduleKey: string, enabled: boolean]
+    result: PacksSnapshot
+  }
+  [IPC_INVOKE.resetSession]: { args: []; result: SessionState }
+  [IPC_INVOKE.setPackEnabled]: { args: [packId: string, enabled: boolean]; result: PacksSnapshot }
+  [IPC_INVOKE.setModulePlacement]: {
+    args: [moduleKey: string, placement: ModulePlacementChange]
+    result: PacksSnapshot
+  }
+  [IPC_INVOKE.adjustSession]: { args: [values: SessionAdjustment]; result: SessionState }
+  [IPC_INVOKE.openOverlaysFolder]: { args: []; result: void }
+  [IPC_INVOKE.setModuleSetting]: {
+    args: [moduleKey: string, settingKey: string, value: SettingValue]
+    result: PacksSnapshot
+  }
+  [IPC_INVOKE.getGameSetup]: { args: []; result: GameSetupInfo }
+  [IPC_INVOKE.detectGame]: { args: []; result: GameSetupInfo }
+  [IPC_INVOKE.setGameDir]: { args: [dir: string | null]; result: GameSetupInfo }
+  /** Ouvre le sélecteur de dossier ; `null` si l'utilisateur annule. */
+  [IPC_INVOKE.pickGameDir]: { args: []; result: GameSetupInfo | null }
+  [IPC_INVOKE.configureStatsApi]: { args: [packetSendRate: number]; result: GameSetupInfo }
+  [IPC_INVOKE.restoreStatsApi]: { args: []; result: GameSetupInfo }
+  /** Ferme le jeu s'il tourne, puis le relance. */
+  [IPC_INVOKE.restartGame]: { args: []; result: void }
+  [IPC_INVOKE.setGameHud]: { args: [visible: boolean]; result: void }
+  /** `null` = écran principal. */
+  [IPC_INVOKE.setDisplay]: { args: [displayId: number | null]; result: DisplayState }
+  [IPC_INVOKE.setOverlaysVisible]: { args: [visible: boolean]; result: OverlaySettings }
+  [IPC_INVOKE.setShortcut]: { args: [shortcut: string | null]; result: OverlaySettings }
+  /** Ouvre la couche de placement à la souris par-dessus l'écran des overlays. */
+  [IPC_INVOKE.startEditMode]: { args: []; result: void }
+  [IPC_INVOKE.stopEditMode]: { args: []; result: void }
+  [IPC_INVOKE.setLanguage]: { args: [language: Language]; result: Language }
+}
+
+/** `null` rétablit la valeur du manifeste (position) ou 1 (échelle) ; absent = inchangé. */
+export interface ModulePlacementChange {
+  position?: Position | null
+  scale?: number | null
+}
+
+/** Valeurs de session corrigées à la main ; les absentes ne changent pas. */
+export interface SessionAdjustment {
+  wins?: number
+  losses?: number
+  streak?: number
+}
+
+/** Notifications main → client : contenu de chaque canal. */
+export interface EventMap {
+  [IPC_EVENTS.connection]: ConnectionStatus
+  [IPC_EVENTS.session]: SessionState
+  [IPC_EVENTS.packs]: PacksSnapshot
+  [IPC_EVENTS.display]: DisplayState
+  [IPC_EVENTS.overlays]: OverlaySettings
+  [IPC_EVENTS.language]: Language
+}
+
+export type Unsubscribe = () => void
+
+/** API exposée au client React par le preload (`window.rlstudio`). Seul accès du client au main. */
+export interface RlStudioApi {
+  getState(): Promise<AppState>
+  reloadPacks(): Promise<PacksSnapshot>
+  setModuleEnabled(moduleKey: string, enabled: boolean): Promise<PacksSnapshot>
+  resetSession(): Promise<SessionState>
+  setPackEnabled(packId: string, enabled: boolean): Promise<PacksSnapshot>
+  setModulePlacement(moduleKey: string, placement: ModulePlacementChange): Promise<PacksSnapshot>
+  adjustSession(values: SessionAdjustment): Promise<SessionState>
+  openOverlaysFolder(): Promise<void>
+  setModuleSetting(
+    moduleKey: string,
+    settingKey: string,
+    value: SettingValue
+  ): Promise<PacksSnapshot>
+  getGameSetup(): Promise<GameSetupInfo>
+  detectGame(): Promise<GameSetupInfo>
+  setGameDir(dir: string | null): Promise<GameSetupInfo>
+  pickGameDir(): Promise<GameSetupInfo | null>
+  configureStatsApi(packetSendRate: number): Promise<GameSetupInfo>
+  restoreStatsApi(): Promise<GameSetupInfo>
+  restartGame(): Promise<void>
+  setGameHud(visible: boolean): Promise<void>
+  setDisplay(displayId: number | null): Promise<DisplayState>
+  setOverlaysVisible(visible: boolean): Promise<OverlaySettings>
+  setShortcut(shortcut: string | null): Promise<OverlaySettings>
+  startEditMode(): Promise<void>
+  stopEditMode(): Promise<void>
+  setLanguage(language: Language): Promise<Language>
+  onConnection(listener: (status: ConnectionStatus) => void): Unsubscribe
+  onSession(listener: (session: SessionState) => void): Unsubscribe
+  onPacks(listener: (packs: PacksSnapshot) => void): Unsubscribe
+  onDisplay(listener: (state: DisplayState) => void): Unsubscribe
+  onOverlays(listener: (settings: OverlaySettings) => void): Unsubscribe
+  onLanguage(listener: (language: Language) => void): Unsubscribe
+}
+
+/**
+ * Arguments de `modules:set-enabled`, revalidés côté main : le client est notre code, mais tout
+ * ce qui franchit une frontière de processus est vérifié.
+ */
+export const setModuleEnabledArgs = z.tuple([
+  z.string().refine(isModuleKey, { error: 'clé de module invalide (attendu : pack/module)' }),
+  z.boolean()
+])
+
+export const setPackEnabledArgs = z.tuple([
+  z.string().regex(ID_PATTERN, { error: 'identifiant de pack invalide' }),
+  z.boolean()
+])
+
+export const setModulePlacementArgs = z.tuple([
+  z.string().refine(isModuleKey, { error: 'clé de module invalide (attendu : pack/module)' }),
+  z.strictObject({
+    position: positionSchema.nullable().optional(),
+    // les bornes de l'échelle sont vérifiées par Services.setModulePlacement
+    scale: z.number().nullable().optional()
+  })
+])
+
+export const adjustSessionArgs = z.tuple([
+  z.strictObject({
+    wins: z.number().optional(),
+    losses: z.number().optional(),
+    streak: z.number().optional()
+  })
+])
+
+export const setModuleSettingArgs = z.tuple([
+  z.string().refine(isModuleKey, { error: 'clé de module invalide (attendu : pack/module)' }),
+  z.string().min(1).max(64),
+  // la valeur est vérifiée contre la définition du manifeste par Services.setModuleSetting
+  z.union([z.boolean(), z.number(), z.string().max(1000)])
+])
+
+export const setGameDirArgs = z.tuple([z.string().min(1).max(1024).nullable()])
+
+export const configureStatsApiArgs = z.tuple([
+  z.number().refine(isValidPacketSendRate, { error: 'paquets par seconde : entier de 0 à 120' })
+])
+
+export const setGameHudArgs = z.tuple([z.boolean()])
+
+export const setDisplayArgs = z.tuple([z.number().int().nullable()])
+
+export const setOverlaysVisibleArgs = z.tuple([z.boolean()])
+
+export const setShortcutArgs = z.tuple([
+  z
+    .string()
+    .max(40)
+    .refine(isValidAccelerator, { error: 'raccourci invalide (ex. Ctrl+Shift+F9)' })
+    .nullable()
+])
+
+export const setLanguageArgs = z.tuple([z.enum(LANGUAGES)])

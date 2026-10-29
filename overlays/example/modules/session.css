@@ -1,0 +1,58 @@
+:root {
+  --win-color: #4cdb8a;
+  --bg-opacity: 0.85;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent; /* indispensable : la fenêtre d'overlay et OBS sont transparents */
+  overflow: hidden;
+}
+
+.bar {
+  box-sizing: border-box;
+  width: 420px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 18px;
+  border-radius: 10px;
+  background: rgba(15, 18, 28, var(--bg-opacity));
+  color: #fff;
+  font:
+    600 18px/1 system-ui,
+    'Segoe UI',
+    sans-serif;
+}
+
+.stat b {
+  margin-right: 4px;
+}
+
+.stat i {
+  font-style: normal;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+#wins {
+  color: var(--win-color);
+}
+
+.score {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #777;
+}
+
+.dot.connected {
+  background: var(--win-color);
+}

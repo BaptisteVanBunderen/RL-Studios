@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Jauge de boost</title>
+    <link rel="stylesheet" href="common.css" />
+    <style>
+      .panel {
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .ring {
+        position: relative;
+        width: 120px;
+        height: 120px;
+      }
+      .ring svg {
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+      }
+      .ring circle {
+        fill: none;
+        stroke-width: 10;
+        stroke-linecap: round;
+      }
+      .track {
+        stroke: rgba(255, 255, 255, 0.1);
+      }
+      #arc {
+        stroke: var(--boost, #e96f22);
+        transition: stroke-dashoffset 0.1s linear;
+      }
+      #arc.low {
+        stroke: var(--low, #ff4444);
+      }
+      #boost {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 38px;
+        font-weight: 800;
+      }
+      #speed-block {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.6);
+      }
+      #speed-block b {
+        font-size: 18px;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div class="ring">
+        <svg viewBox="0 0 120 120">
+          <circle class="track" cx="60" cy="60" r="50" />
+          <circle
+            id="arc"
+            cx="60"
+            cy="60"
+            r="50"
+            stroke-dasharray="314.16"
+            stroke-dashoffset="314.16"
+          />
+        </svg>
+        <div id="boost">–</div>
+      </div>
+      <div id="speed-block"><b id="speed">0</b> km/h</div>
+    </div>
+
+    <script src="/sdk/rlstudio.js"></script>
+    <script src="common.js"></script>
+    <script>
+      var CIRCUMFERENCE = 2 * Math.PI * 50
+      var settings = {
+        showSpeed: true,
+        boostColor: '#e96f22',
+        lowColor: '#ff4444',
+        lowThreshold: 25,
+        bgOpacity: 0.88
+      }
+      var match = null
+
+      function byId(id) {
+        return document.getElementById(id)
+      }
+
+      function render() {
+        byId('speed-block').hidden = !settings.showSpeed
+        // le boost et la vitesse ne sont envoyés que pour le joueur local et ses coéquipiers
+        var me = Stats.localPlayer(match)
+        var boost = me && me.boost !== null ? Math.max(0, Math.min(100, me.boost)) : null
+        byId('boost').textContent = boost === null ? '–' : Math.round(boost)
+        byId('arc').style.strokeDashoffset =
+          CIRCUMFERENCE * (1 - (boost === null ? 0 : boost / 100))
+        byId('arc').classList.toggle('low', boost !== null && boost < settings.lowThreshold)
+        byId('speed').textContent = me && me.speed !== null ? Math.round(me.speed) : 0
+      }
+
+      RLStudio.on('settings', function (values) {
+        settings = values
+        var root = document.documentElement.style
+        root.setProperty('--bg-opacity', values.bgOpacity)
+        root.setProperty('--boost', values.boostColor)
+        root.setProperty('--low', values.lowColor)
+        render()
+      })
+      RLStudio.on('match', function (m) {
+        match = m
+        render()
+      })
+    </script>
+  </body>
+</html>
