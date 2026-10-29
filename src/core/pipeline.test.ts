@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { MatchState } from './match'
 import { StatsPipeline } from './pipeline'
 import type { OverlayEvent } from './protocol'
-import type { SessionState } from './session'
+import { emptySession, type SessionState } from './session'
 import { loadCapture } from './test-utils/loadCapture'
 
 type Call =
@@ -98,7 +98,7 @@ describe('StatsPipeline', () => {
     const seen: SessionState[] = []
     const p2 = new StatsPipeline({ onSession: (s) => seen.push(s) })
     p2.resetSession()
-    expect(seen).toEqual([{ wins: 0, losses: 0, streak: 0, bestStreak: 0, lastResult: null }])
+    expect(seen).toEqual([emptySession()])
     pipeline.resetSession()
     expect(pipeline.session.wins).toBe(0)
   })

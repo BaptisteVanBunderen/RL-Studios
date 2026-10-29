@@ -1,4 +1,4 @@
-import type { MatchResult } from './match'
+import type { MatchResult, MatchStats } from './match'
 
 /** Dernier résultat compté, tel que vu par les overlays. */
 export interface LastResult {
@@ -10,7 +10,8 @@ export interface LastResult {
 /**
  * État de session diffusé aux overlays (topic `session`).
  * `streak` est signée : > 0 = victoires d'affilée, < 0 = défaites d'affilée, 0 = aucun résultat.
- * `bestStreak` = meilleure série de victoires.
+ * `bestStreak` = meilleure série de victoires. `stats` cumule les statistiques du joueur local :
+ * chaque tir, but, passe, arrêt ou démolition de plus s'ajoute dès qu'il se produit (freeplay exclu).
  */
 export interface SessionState {
   wins: number
@@ -18,6 +19,13 @@ export interface SessionState {
   streak: number
   bestStreak: number
   lastResult: LastResult | null
+  stats: SessionStats
+}
+
+export type SessionStats = MatchStats
+
+function emptyStats(): SessionStats {
+  return { goals: 0, assists: 0, saves: 0, shots: 0, demos: 0, demosTaken: 0 }
 }
 
 /**
@@ -29,7 +37,14 @@ export interface SessionState {
 export const EXCLUDED_PLAYLIST_IDS: readonly number[] = [9]
 
 export function emptySession(): SessionState {
-  return { wins: 0, losses: 0, streak: 0, bestStreak: 0, lastResult: null }
+  return {
+    wins: 0,
+    losses: 0,
+    streak: 0,
+    bestStreak: 0,
+    lastResult: null,
+    stats: emptyStats()
+  }
 }
 
 /** Compteurs de la session en cours (victoires, défaites, séries). Pure, sans Electron. */
@@ -41,7 +56,8 @@ export class SessionStore {
   get state(): SessionState {
     return {
       ...this.session,
-      lastResult: this.session.lastResult && { ...this.session.lastResult }
+      lastResult: this.session.lastResult && { ...this.session.lastResult },
+      stats: { ...this.session.stats }
     }
   }
 
@@ -70,6 +86,22 @@ export class SessionStore {
     }
     s.lastResult = { won: result.won, playlistId: result.playlistId }
     return true
+  }
+
+  /**
+   * Ajoute ce que le joueur local vient de faire (variations calculées par MatchTracker).
+   * Ignoré hors session (freeplay). Renvoie `true` si les totaux ont changé.
+   */
+  addStats(delta: SessionStats, playlistId: number | null): boolean {
+    if (playlistId !== null && EXCLUDED_PLAYLIST_IDS.includes(playlistId)) return false
+    let changed = false
+    for (const key of Object.keys(delta) as (keyof SessionStats)[]) {
+      if (delta[key] > 0) {
+        this.session.stats[key] += delta[key]
+        changed = true
+      }
+    }
+    return changed
   }
 
   /** Remet les compteurs à zéro (nouvelle série, début d'un BO). Les GUID comptés sont conservés. */

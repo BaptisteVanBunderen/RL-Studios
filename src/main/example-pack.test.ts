@@ -15,7 +15,7 @@ describe('packs livrés avec l’application (dossier overlays/)', () => {
   it('contiennent le pack d’exemple et la barre de session', async () => {
     const { packs } = await loader.scan()
     expect(packs.map((p) => p.id)).toEqual(
-      expect.arrayContaining(['example', 'tracker-session', 'scoreboard'])
+      expect.arrayContaining(['example', 'tracker-session', 'scoreboard', 'match-stats'])
     )
   })
 
@@ -49,6 +49,17 @@ describe('packs livrés avec l’application (dossier overlays/)', () => {
       'blueColor',
       'orangeColor',
       'bgOpacity'
+    ])
+  })
+
+  it('match-stats : quatre modules, chacun ne demande que les topics utiles', async () => {
+    const { packs } = await loader.scan()
+    const modules = packs.find((p) => p.id === 'match-stats')?.manifest.modules ?? []
+    expect(modules.map((m) => [m.id, m.data])).toEqual([
+      ['demos', ['match', 'session']],
+      ['ball-speed', ['match', 'event']],
+      ['accuracy', ['match', 'session']],
+      ['boost', ['match']]
     ])
   })
 

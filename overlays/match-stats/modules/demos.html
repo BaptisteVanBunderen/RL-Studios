@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Démolitions</title>
+    <link rel="stylesheet" href="common.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <div class="table" style="--cols: 2">
+        <span></span>
+        <span class="head">Faites</span>
+        <span class="head">Subies</span>
+        <div class="group">
+          <span class="name">Match</span>
+          <b id="m-made" class="num good">0</b>
+          <b id="m-taken" class="num bad">0</b>
+        </div>
+        <div class="group">
+          <span class="name">Session</span>
+          <b id="s-made" class="num good">0</b>
+          <b id="s-taken" class="num bad">0</b>
+        </div>
+      </div>
+    </div>
+
+    <script src="/sdk/rlstudio.js"></script>
+    <script src="common.js"></script>
+    <script>
+      var settings = { bgOpacity: 0.88 }
+      var match = null
+      var session = null
+
+      function render() {
+        var m = Stats.matchStats(match)
+        Stats.setText(document.getElementById('m-made'), m.demos)
+        Stats.setText(document.getElementById('m-taken'), m.demosTaken)
+        if (!session) return
+        var s = Stats.sessionStats(session)
+        Stats.setText(document.getElementById('s-made'), s.demos)
+        Stats.setText(document.getElementById('s-taken'), s.demosTaken)
+      }
+
+      RLStudio.on('settings', function (values) {
+        settings = values
+        document.documentElement.style.setProperty('--bg-opacity', values.bgOpacity)
+        render()
+      })
+      RLStudio.on('match', function (m) {
+        match = m
+        render()
+      })
+      RLStudio.on('session', function (s) {
+        session = s
+        render()
+      })
+    </script>
+  </body>
+</html>

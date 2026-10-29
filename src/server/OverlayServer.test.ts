@@ -63,7 +63,8 @@ const session = (wins: number): SessionState => ({
   losses: 0,
   streak: wins,
   bestStreak: wins,
-  lastResult: { won: true, playlistId: 2 }
+  lastResult: { won: true, playlistId: 2 },
+  stats: { goals: 0, assists: 0, saves: 0, shots: 0, demos: 0, demosTaken: 0 }
 })
 
 const match = (timeSeconds: number): MatchState => ({
@@ -77,7 +78,10 @@ const match = (timeSeconds: number): MatchState => ({
   players: [],
   localPlayerId: null,
   myTeamNum: null,
-  winnerTeamNum: null
+  winnerTeamNum: null,
+  ballSpeed: 0,
+  maxBallSpeed: 0,
+  demosTaken: 0
 })
 
 // ---------------------------------------------------------------------------------------------

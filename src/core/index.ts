@@ -7,7 +7,7 @@ export type * from './match'
 export { MatchTracker } from './MatchTracker'
 export type { TrackerOptions, TrackerUpdate } from './MatchTracker'
 export { SessionStore, EXCLUDED_PLAYLIST_IDS, emptySession } from './session'
-export type { SessionState, LastResult } from './session'
+export type { SessionState, SessionStats, LastResult } from './session'
 export { StatsPipeline } from './pipeline'
 export type { PipelineHandlers } from './pipeline'
 export {

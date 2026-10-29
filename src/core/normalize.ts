@@ -32,7 +32,10 @@ function toUpdate(d: z.infer<typeof updateStateSchema>): UpdateEvent {
     shots: p.Shots,
     assists: p.Assists,
     saves: p.Saves,
-    demos: p.Demos
+    demos: p.Demos,
+    touches: p.Touches,
+    speed: p.Speed ?? null,
+    boost: p.Boost ?? null
   }))
 
   const rawTarget = d.Game.Target
@@ -44,6 +47,7 @@ function toUpdate(d: z.infer<typeof updateStateSchema>): UpdateEvent {
     overtime: d.Game.bOvertime,
     isReplay: d.Game.bReplay,
     isHistoryReplay: d.Game.Frame !== undefined,
+    ballSpeed: d.Game.Ball?.Speed ?? 0,
     teams: d.Game.Teams.map((t) => ({ teamNum: t.TeamNum, name: t.Name, score: t.Score })),
     players,
     target: rawTarget

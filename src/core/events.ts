@@ -12,6 +12,11 @@ export interface PlayerState extends PlayerRef {
   assists: number
   saves: number
   demos: number
+  touches: number
+  /** Vitesse de la voiture (km/h) ; `null` si le jeu ne l'envoie pas pour ce joueur. */
+  speed: number | null
+  /** Boost de 0 à 100 ; `null` si le jeu ne l'envoie pas pour ce joueur. */
+  boost: number | null
 }
 
 export interface TeamScore {
@@ -32,6 +37,8 @@ export interface UpdateEvent {
   overtime: boolean
   isReplay: boolean
   isHistoryReplay: boolean
+  /** Vitesse de la balle (km/h, unité de l'API, comme `goalSpeed`). */
+  ballSpeed: number
   teams: TeamScore[]
   players: PlayerState[]
   target: TargetPlayer | null

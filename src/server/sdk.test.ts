@@ -52,7 +52,8 @@ describe('SDK contre le vrai serveur', () => {
     losses: 0,
     streak: wins,
     bestStreak: wins,
-    lastResult: null
+    lastResult: null,
+    stats: { goals: 0, assists: 0, saves: 0, shots: 0, demos: 0, demosTaken: 0 }
   })
 
   beforeEach(async () => {

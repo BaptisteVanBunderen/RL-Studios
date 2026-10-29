@@ -10,7 +10,7 @@
  * (/overlay/<pack>/<module>).
  *
  *   RLStudio.on('settings',   function (values)  { ... })  // valeurs des réglages du module
- *   RLStudio.on('session',    function (session) { ... })  // { wins, losses, streak, bestStreak, lastResult }
+ *   RLStudio.on('session',    function (session) { ... })  // { wins, losses, streak, bestStreak, lastResult, stats }
  *   RLStudio.on('match',      function (match)   { ... })  // état du match, ou null entre deux matchs
  *   RLStudio.on('event',      function (event)   { ... })  // but, fin de match… (ponctuel)
  *   RLStudio.on('connection', function (c)       { ... })  // { status: 'game-closed' | 'api-disabled' | 'connected' }

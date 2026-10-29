@@ -209,8 +209,8 @@ describe('Services', () => {
 
       expect(statuses).toEqual(['connected'])
       expect(services.getState().connection).toBe('connected')
-      expect(sessions).toHaveLength(1)
-      expect(sessions[0]).toMatchObject({ wins: 1, losses: 0, streak: 1 })
+      // la session évolue aussi à chaque tir, but… : on regarde la dernière valeur
+      expect(sessions.at(-1)).toMatchObject({ wins: 1, losses: 0, streak: 1 })
     })
 
     it('mémorise le joueur local dans la config, et le retrouve au lancement suivant', async () => {

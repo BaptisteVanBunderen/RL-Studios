@@ -1,0 +1,177 @@
+{
+  "manifestVersion": 1,
+  "name": "Stats de match",
+  "description": "Démolitions, vitesse de la balle, précision des tirs et jauge de boost, par match et par session",
+  "author": "THEVBAT",
+  "version": "1.0.0",
+  "modules": [
+    {
+      "id": "demos",
+      "name": "Démolitions",
+      "description": "Démolitions faites et subies, sur le match en cours et sur la session",
+      "entry": "modules/demos.html",
+      "size": {
+        "width": 300,
+        "height": 112
+      },
+      "defaultPosition": {
+        "anchor": "bottom-left",
+        "x": 20,
+        "y": 20
+      },
+      "data": ["match", "session"],
+      "settings": [
+        {
+          "key": "bgOpacity",
+          "type": "range",
+          "label": "Opacité du fond",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "unit": "%",
+          "default": 0.88
+        }
+      ]
+    },
+    {
+      "id": "ball-speed",
+      "name": "Vitesse de la balle",
+      "description": "Vitesse actuelle de la balle, record du match et vitesse du dernier but",
+      "entry": "modules/ball-speed.html",
+      "size": {
+        "width": 300,
+        "height": 112
+      },
+      "defaultPosition": {
+        "anchor": "bottom",
+        "x": 0,
+        "y": 20
+      },
+      "data": ["match", "event"],
+      "settings": [
+        {
+          "key": "gaugeMax",
+          "type": "number",
+          "label": "Vitesse affichée à jauge pleine",
+          "min": 100,
+          "max": 250,
+          "step": 10,
+          "unit": "km/h",
+          "default": 160
+        },
+        {
+          "key": "showLastGoal",
+          "type": "boolean",
+          "label": "Afficher la vitesse du dernier but",
+          "default": true
+        },
+        {
+          "key": "gaugeColor",
+          "type": "color",
+          "label": "Couleur de la jauge",
+          "default": "#e96f22"
+        },
+        {
+          "key": "bgOpacity",
+          "type": "range",
+          "label": "Opacité du fond",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "unit": "%",
+          "default": 0.88
+        }
+      ]
+    },
+    {
+      "id": "accuracy",
+      "name": "Précision",
+      "description": "Tirs, buts et pourcentage de réussite, sur le match et sur la session",
+      "entry": "modules/accuracy.html",
+      "size": {
+        "width": 300,
+        "height": 112
+      },
+      "defaultPosition": {
+        "anchor": "bottom-right",
+        "x": 20,
+        "y": 20
+      },
+      "data": ["match", "session"],
+      "settings": [
+        {
+          "key": "showSession",
+          "type": "boolean",
+          "label": "Afficher la ligne de la session",
+          "default": true
+        },
+        {
+          "key": "bgOpacity",
+          "type": "range",
+          "label": "Opacité du fond",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "unit": "%",
+          "default": 0.88
+        }
+      ]
+    },
+    {
+      "id": "boost",
+      "name": "Jauge de boost",
+      "description": "Boost restant et vitesse de ta voiture",
+      "entry": "modules/boost.html",
+      "size": {
+        "width": 170,
+        "height": 190
+      },
+      "defaultPosition": {
+        "anchor": "bottom-right",
+        "x": 340,
+        "y": 20
+      },
+      "data": ["match"],
+      "settings": [
+        {
+          "key": "showSpeed",
+          "type": "boolean",
+          "label": "Afficher la vitesse de la voiture",
+          "default": true
+        },
+        {
+          "key": "boostColor",
+          "type": "color",
+          "label": "Couleur de la jauge",
+          "default": "#e96f22"
+        },
+        {
+          "key": "lowColor",
+          "type": "color",
+          "label": "Couleur quand il reste peu de boost",
+          "default": "#ff4444"
+        },
+        {
+          "key": "lowThreshold",
+          "type": "number",
+          "label": "Boost « faible » en dessous de",
+          "min": 0,
+          "max": 50,
+          "step": 5,
+          "unit": "%",
+          "default": 25
+        },
+        {
+          "key": "bgOpacity",
+          "type": "range",
+          "label": "Opacité du fond",
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "unit": "%",
+          "default": 0.88
+        }
+      ]
+    }
+  ]
+}

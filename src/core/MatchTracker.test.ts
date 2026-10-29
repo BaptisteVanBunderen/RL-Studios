@@ -26,7 +26,10 @@ function player(name: string, primaryId: string, teamNum: number): PlayerState {
     shots: 0,
     assists: 0,
     saves: 0,
-    demos: 0
+    demos: 0,
+    touches: 0,
+    speed: null,
+    boost: null
   }
 }
 
@@ -40,6 +43,7 @@ function update(over: Partial<UpdateEvent> = {}): UpdateEvent {
     overtime: false,
     isReplay: false,
     isHistoryReplay: false,
+    ballSpeed: 0,
     teams: [
       { teamNum: 0, name: 'Blue', score: 0 },
       { teamNum: 1, name: 'Orange', score: 0 }

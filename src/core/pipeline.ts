@@ -46,11 +46,15 @@ export class StatsPipeline {
     const event = parsed && this.dedupe(parsed)
     if (!event) return
 
-    const { matchChanged, result } = this.tracker.handle(event)
+    const { matchChanged, result, statsDelta } = this.tracker.handle(event)
 
     if (matchChanged) this.handlers.onMatch?.(this.tracker.match)
     // La session avant l'event : un overlay qui réagit à `matchEnded` y lit déjà le nouveau compteur.
-    if (result && this.store.add(result)) this.handlers.onSession?.(this.store.state)
+    let sessionChanged = result !== null && this.store.add(result)
+    if (statsDelta && this.store.addStats(statsDelta.delta, statsDelta.playlistId)) {
+      sessionChanged = true
+    }
+    if (sessionChanged) this.handlers.onSession?.(this.store.state)
     if (isOverlayEvent(event) && !this.tracker.inHistoryReplay) this.handlers.onEvent?.(event)
   }
 

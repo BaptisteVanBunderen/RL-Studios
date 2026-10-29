@@ -54,7 +54,8 @@ const session = (wins: number): SessionState => ({
   losses: 0,
   streak: wins,
   bestStreak: wins,
-  lastResult: null
+  lastResult: null,
+  stats: { goals: 0, assists: 0, saves: 0, shots: 0, demos: 0, demosTaken: 0 }
 })
 
 describe('OverlayServer : modules et réglages', () => {

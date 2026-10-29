@@ -18,7 +18,11 @@ const playerState = z.looseObject({
   Shots: z.number().default(0),
   Assists: z.number().default(0),
   Saves: z.number().default(0),
-  Demos: z.number().default(0)
+  Demos: z.number().default(0),
+  Touches: z.number().default(0),
+  // envoyés pour le joueur local et ses coéquipiers seulement (docs/stats-api.md)
+  Speed: z.number().optional(),
+  Boost: z.number().optional()
 })
 
 const team = z.looseObject({
@@ -37,6 +41,7 @@ export const updateStateSchema = z.looseObject({
     bOvertime: z.boolean().default(false),
     bReplay: z.boolean().default(false),
     Frame: z.number().optional(),
+    Ball: z.looseObject({ Speed: z.number().default(0) }).optional(),
     Target: playerRef.optional()
   })
 })

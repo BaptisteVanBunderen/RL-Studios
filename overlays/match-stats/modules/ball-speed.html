@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Vitesse de la balle</title>
+    <link rel="stylesheet" href="common.css" />
+    <style>
+      .speed {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+      }
+      #speed {
+        font-size: 40px;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .unit {
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        color: rgba(255, 255, 255, 0.5);
+      }
+      #max-block {
+        margin-left: auto;
+        text-align: right;
+      }
+      #max-block b {
+        font-size: 20px;
+        font-weight: 800;
+      }
+      #max-block small,
+      #goal small {
+        display: block;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.45);
+      }
+      .gauge {
+        flex-shrink: 0;
+        height: 8px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+      }
+      #fill {
+        height: 100%;
+        width: 0;
+        border-radius: 4px;
+        background: var(--gauge, #e96f22);
+        transition: width 0.12s linear;
+      }
+      #goal {
+        font-size: 13px;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 8px;
+      }
+      #goal b {
+        font-size: 15px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div class="speed">
+        <span id="speed">–</span><span class="unit">km/h</span>
+        <div id="max-block">
+          <small>Record du match</small>
+          <b id="max">0</b>
+        </div>
+      </div>
+      <div class="gauge"><div id="fill"></div></div>
+      <div id="goal" hidden>
+        <small>Dernier but</small>
+        <span><b id="goal-speed">0</b> km/h · <span id="goal-name"></span></span>
+      </div>
+    </div>
+
+    <script src="/sdk/rlstudio.js"></script>
+    <script src="common.js"></script>
+    <script>
+      var settings = { gaugeMax: 160, showLastGoal: true, gaugeColor: '#e96f22', bgOpacity: 0.88 }
+      var match = null
+      var lastGoal = null
+      var guid = null
+
+      function byId(id) {
+        return document.getElementById(id)
+      }
+
+      function render() {
+        var speed = match ? match.ballSpeed : 0
+        byId('speed').textContent = match ? Math.round(speed) : '–'
+        byId('fill').style.width = Math.min(100, (speed / settings.gaugeMax) * 100) + '%'
+        Stats.setText(byId('max'), match ? Math.round(match.maxBallSpeed) : 0)
+
+        byId('goal').hidden = !settings.showLastGoal || lastGoal === null
+        if (lastGoal) {
+          byId('goal-speed').textContent = Math.round(lastGoal.speed)
+          byId('goal-name').textContent = lastGoal.name // textContent : le nom vient du jeu
+        }
+      }
+
+      RLStudio.on('settings', function (values) {
+        settings = values
+        var root = document.documentElement.style
+        root.setProperty('--bg-opacity', values.bgOpacity)
+        root.setProperty('--gauge', values.gaugeColor)
+        render()
+      })
+
+      RLStudio.on('match', function (m) {
+        // un nouveau match efface le dernier but de l'ancien
+        var next = m ? m.matchGuid : null
+        if (next !== guid && next !== '') {
+          if (guid !== null && next !== null) lastGoal = null
+          guid = next
+        }
+        match = m
+        render()
+      })
+
+      // Les buts arrivent par le flux d'events ; ils ne sont jamais rejoués à la connexion.
+      RLStudio.on('event', function (e) {
+        if (e.type !== 'goal') return
+        lastGoal = { speed: e.goalSpeed, name: e.scorer.name }
+        render()
+      })
+    </script>
+  </body>
+</html>

@@ -79,11 +79,15 @@ describe('chaîne complète : trames → pipeline → serveur → overlay', () =
     await waitFor(() => lastSession(messages)?.losses === 4)
     expect(lastSession(messages)).toMatchObject({ wins: 3, losses: 4, streak: 1, bestStreak: 1 })
 
-    // Une mise à jour de session par match compté (+ la valeur initiale à la connexion).
+    // Les compteurs de matchs avancent un par un (la session est aussi mise à jour à chaque tir,
+    // but ou démolition : on ne garde que les changements de victoires + défaites).
     const sessions = messages.filter((m) => m.type === 'session')
-    expect(
-      sessions.map((m) => (m.payload as SessionState).wins + (m.payload as SessionState).losses)
-    ).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+    const played = sessions.map(
+      (m) => (m.payload as SessionState).wins + (m.payload as SessionState).losses
+    )
+    expect(played.filter((n, i) => i === 0 || n !== played[i - 1])).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7
+    ])
 
     // Les events ponctuels arrivent : fins de match, buts ; mais ni l'état périodique ni l'horloge.
     const eventTypes = new Set(
