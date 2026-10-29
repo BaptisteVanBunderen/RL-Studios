@@ -9,6 +9,7 @@ import {
 } from '@core/index'
 import { useAction, useApp } from '../appContext'
 import { MoveIcon } from '../components/icons'
+import { ObsPanel } from '../components/ObsPanel'
 import { LivePreview } from '../components/LivePreview'
 import { PageHeader } from '../components/PageHeader'
 import { SettingField } from '../components/SettingFields'
@@ -238,6 +239,7 @@ export function ModulePage({ moduleKey }: { moduleKey: string }): React.JSX.Elem
             </div>
           </Panel>
           <SessionPanel />
+          <ObsPanel module={module} />
         </div>
 
         <div className="space-y-5">
