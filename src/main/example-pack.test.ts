@@ -14,7 +14,9 @@ describe('packs livrés avec l’application (dossier overlays/)', () => {
 
   it('contiennent le pack d’exemple et la barre de session', async () => {
     const { packs } = await loader.scan()
-    expect(packs.map((p) => p.id)).toEqual(expect.arrayContaining(['example', 'tracker-session']))
+    expect(packs.map((p) => p.id)).toEqual(
+      expect.arrayContaining(['example', 'tracker-session', 'scoreboard'])
+    )
   })
 
   it('tracker-session : un module bar-slice 425 × 47 qui ne demande que la session', async () => {
@@ -31,6 +33,21 @@ describe('packs livrés avec l’application (dossier overlays/)', () => {
       'showBest',
       'showLossStreak',
       'goodWinrate',
+      'bgOpacity'
+    ])
+  })
+
+  it('scoreboard : un module board qui ne demande que le match, 7 réglages valides', async () => {
+    const { packs } = await loader.scan()
+    const module = packs.find((p) => p.id === 'scoreboard')?.manifest.modules[0]
+    expect(module).toMatchObject({ id: 'board', data: ['match'] })
+    expect(module?.settings.map((s) => s.key)).toEqual([
+      'showTimer',
+      'showStats',
+      'highlightMe',
+      'hideOutsideMatch',
+      'blueColor',
+      'orangeColor',
       'bgOpacity'
     ])
   })
