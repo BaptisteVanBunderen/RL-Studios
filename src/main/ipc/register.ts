@@ -88,7 +88,7 @@ export function registerIpc(services: Services, host: IpcHost): () => void {
   })
   handle(IPC_INVOKE.openOverlaysFolder, async () => {
     // `openPath` renvoie un message d'erreur, ou une chaîne vide si tout va bien.
-    const error = await shell.openPath(services.packs.dir)
+    const error = await shell.openPath(services.userOverlaysDir)
     if (error) {
       throw new Error(
         services.tr(

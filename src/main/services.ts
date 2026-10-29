@@ -1,3 +1,4 @@
+import { mkdir } from 'node:fs/promises'
 import {
   Emitter,
   MAX_SCALE,
@@ -47,7 +48,13 @@ import { PackLoader } from './packs/PackLoader'
 
 export interface ServicesOptions {
   configFile: string
+  /** Packs fournis avec l'application (remplacés à chaque mise à jour). */
   overlaysDir: string
+  /**
+   * Packs de l'utilisateur, jamais touchés par une mise à jour ; créé au démarrage. Un pack de même
+   * nom que l'un des packs fournis le remplace. Sans lui, `overlaysDir` sert aux deux.
+   */
+  userOverlaysDir?: string
   sdkSource: string
   /**
    * Écrans branchés, l'écran principal en premier (fournis par Electron ; sans eux, un écran
@@ -72,6 +79,8 @@ export function toConnectionStatus(link: LinkStatus): ConnectionStatus {
 export class Services {
   readonly config: ConfigStore
   readonly packs: PackLoader
+  /** Dossier où l'utilisateur dépose ses packs (celui que le client ouvre). */
+  readonly userOverlaysDir: string
   readonly server: OverlayServer
   readonly pipeline: StatsPipeline
   readonly connection: GameConnection
@@ -103,7 +112,12 @@ export class Services {
     this.config = new ConfigStore(options.configFile)
     this.configRecovered = this.config.load().recovered
     this.language = this.config.config.language ?? options.systemLanguage ?? DEFAULT_LANGUAGE
-    this.packs = new PackLoader(options.overlaysDir)
+    this.userOverlaysDir = options.userOverlaysDir ?? options.overlaysDir
+    this.packs = new PackLoader(
+      options.userOverlaysDir
+        ? [options.overlaysDir, options.userOverlaysDir]
+        : [options.overlaysDir]
+    )
 
     const packSource: PackSource = {
       getPack: (id) => this.packs.getPack(id),
@@ -153,6 +167,7 @@ export class Services {
 
   async start(): Promise<void> {
     if (this.started) return
+    await mkdir(this.userOverlaysDir, { recursive: true })
     await this.packs.scan()
     await this.server.start()
     this.started = true

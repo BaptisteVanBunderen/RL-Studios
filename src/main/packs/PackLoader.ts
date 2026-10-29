@@ -20,18 +20,27 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * Scanne le dossier `overlays/` : chaque sous-dossier est un pack, son identifiant est le nom du
+ * Scanne les dossiers de packs : chaque sous-dossier est un pack, son identifiant est le nom du
  * dossier. Un pack invalide n'est pas chargé mais reste listé avec ses erreurs (le client les
  * affiche) ; un pack cassé n'empêche jamais les autres de se charger.
  *
- * Pas d'Electron ici : le dossier est fourni par l'appelant (dev : racine du projet ; installé :
- * `process.resourcesPath/overlays`).
+ * Plusieurs dossiers, du moins prioritaire au plus prioritaire : les packs fournis avec
+ * l'application (remplacés à chaque mise à jour) puis ceux de l'utilisateur (jamais touchés par
+ * l'installeur). À identifiant égal, le dernier dossier l'emporte : copier un pack fourni chez
+ * l'utilisateur permet de le modifier.
+ *
+ * Pas d'Electron ici : les dossiers sont fournis par l'appelant (dev : racine du projet ;
+ * installé : `process.resourcesPath/overlays` et le dossier des données de l'utilisateur).
  */
 export class PackLoader {
   private current: PackScan = { packs: [], invalid: [] }
   private readonly byId = new Map<string, LoadedPack>()
 
-  constructor(readonly dir: string) {}
+  readonly dirs: readonly string[]
+
+  constructor(dirs: string | readonly string[]) {
+    this.dirs = typeof dirs === 'string' ? [dirs] : dirs
+  }
 
   /** Résultat du dernier `scan()`. */
   get result(): PackScan {
@@ -43,27 +52,26 @@ export class PackLoader {
     return this.byId.get(id)
   }
 
-  /** Relit le dossier. Ne lève pas d'exception : un dossier absent donne un résultat vide. */
+  /** Relit les dossiers. Ne lève pas d'exception : un dossier absent donne un résultat vide. */
   async scan(): Promise<PackScan> {
-    const packs: LoadedPack[] = []
-    const invalid: InvalidPack[] = []
-
-    let names: string[]
-    try {
-      const entries = await readdir(this.dir, { withFileTypes: true })
-      names = entries
-        .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-        .map((e) => e.name)
-        .sort()
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(`PackLoader : impossible de lire ${this.dir}`, error)
+    const byName = new Map<string, Loaded>()
+    for (const root of this.dirs) {
+      for (const name of await this.listPackNames(root)) {
+        const loaded = await this.loadPack(root, name)
+        const replaced = byName.get(name)
+        if (replaced && loaded.ok) {
+          loaded.pack.warnings.push(
+            `remplace le pack du même nom de ${replaced.ok ? replaced.pack.dir : replaced.invalid.dir}`
+          )
+        }
+        byName.set(name, loaded)
       }
-      names = []
     }
 
-    for (const name of names) {
-      const loaded = await this.loadPack(name)
+    const packs: LoadedPack[] = []
+    const invalid: InvalidPack[] = []
+    for (const name of [...byName.keys()].sort()) {
+      const loaded = byName.get(name)!
       if (loaded.ok) packs.push(loaded.pack)
       else invalid.push(loaded.invalid)
     }
@@ -74,8 +82,20 @@ export class PackLoader {
     return this.current
   }
 
-  private async loadPack(id: string): Promise<Loaded> {
-    const dir = join(this.dir, id)
+  private async listPackNames(root: string): Promise<string[]> {
+    try {
+      const entries = await readdir(root, { withFileTypes: true })
+      return entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error(`PackLoader : impossible de lire ${root}`, error)
+      }
+      return []
+    }
+  }
+
+  private async loadPack(root: string, id: string): Promise<Loaded> {
+    const dir = join(root, id)
     const fail = (...errors: string[]): Loaded => ({ ok: false, invalid: { id, dir, errors } })
 
     if (!ID_PATTERN.test(id)) {
