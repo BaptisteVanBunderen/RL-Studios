@@ -13,7 +13,6 @@ concurrency:
 jobs:
   check:
     name: Lint, types, tests, build
-    # Windows : l'application cible Windows (tasklist, taskkill, chemins du jeu).
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

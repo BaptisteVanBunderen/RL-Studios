@@ -1,6 +1,5 @@
 name: Release
 
-# Une release = un tag vX.Y.Z posé sur un commit de main.
 on:
   push:
     tags: ['v*']
@@ -38,7 +37,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
-      - run: npm run build:win
+      - run: npm run build:win -- --publish never
 
       - uses: softprops/action-gh-release@v2
         with:
