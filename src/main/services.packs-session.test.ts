@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -37,6 +37,52 @@ describe('Services : pack entier, session corrigée, écran', () => {
 
   const enabledKeys = (snapshot: PacksSnapshot): string[] =>
     snapshot.packs.flatMap((p) => p.modules.filter((m) => m.enabled).map((m) => m.key))
+
+  describe('packs de l’utilisateur', () => {
+    it('crée le dossier de l’utilisateur, y charge ses packs et les sert', async () => {
+      const userDir = join(base, 'userData', 'overlays')
+      await mkdir(join(userDir, 'perso', 'modules'), { recursive: true })
+      await writeFile(
+        join(userDir, 'perso', 'manifest.json'),
+        JSON.stringify({
+          manifestVersion: 1,
+          name: 'Perso',
+          version: '1.0.0',
+          modules: [
+            { id: 'm', name: 'M', entry: 'modules/m.html', size: { width: 10, height: 10 } }
+          ]
+        })
+      )
+      await writeFile(
+        join(userDir, 'perso', 'modules', 'm.html'),
+        '<html><body>perso</body></html>'
+      )
+
+      const services = new Services({
+        configFile,
+        overlaysDir: join(base, 'overlays'),
+        userOverlaysDir: userDir,
+        sdkSource: '',
+        overlayPort: 0,
+        gameWebPort: 1
+      })
+      started.push(services)
+      await services.start()
+
+      expect(services.userOverlaysDir).toBe(userDir)
+      expect((await stat(userDir)).isDirectory()).toBe(true)
+      const ids = services.getState().packs.packs.map((p) => p.id)
+      expect(ids).toContain('perso')
+      expect(ids).toContain('demo')
+      const res = await fetch(`${services.overlayBaseUrl()}/overlay/perso/m`)
+      expect(res.status).toBe(200)
+    })
+
+    it('sans dossier utilisateur distinct, le dossier fourni sert aux deux', async () => {
+      const services = await create()
+      expect(services.userOverlaysDir).toBe(join(base, 'overlays'))
+    })
+  })
 
   describe('setPackEnabled', () => {
     it('active tous les modules du pack en une seule écriture et une seule notification', async () => {

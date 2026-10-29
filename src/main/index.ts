@@ -126,6 +126,7 @@ async function start(): Promise<void> {
   const created = new Services({
     configFile: join(app.getPath('userData'), 'config.json'),
     overlaysDir: overlaysDir(),
+    userOverlaysDir: join(app.getPath('userData'), 'overlays'),
     sdkSource,
     getDisplays: allDisplays,
     systemLanguage: detectLanguage(app.getLocale()),

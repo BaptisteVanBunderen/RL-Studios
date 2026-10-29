@@ -276,4 +276,57 @@ describe('PackLoader', () => {
       expect(loader.getPack('a')).toBeUndefined()
     })
   })
+
+  describe('plusieurs dossiers (packs fournis + packs de l’utilisateur)', () => {
+    let user: string
+    beforeEach(async () => {
+      user = await mkdtemp(join(tmpdir(), 'rl-studio-user-'))
+    })
+    afterEach(async () => {
+      await rm(user, { recursive: true, force: true })
+    })
+
+    async function userPack(id: string, content: Mutable | string = manifest()): Promise<string> {
+      const dir = join(user, id)
+      await mkdir(join(dir, 'modules'), { recursive: true })
+      await writeFile(
+        join(dir, 'manifest.json'),
+        typeof content === 'string' ? content : JSON.stringify(content)
+      )
+      await writeFile(join(dir, 'modules', 'bar.html'), '<html></html>')
+      return dir
+    }
+
+    it('réunit les packs des deux dossiers, triés par identifiant', async () => {
+      await pack('b-fourni')
+      await userPack('a-perso')
+      const { packs } = await new PackLoader([root, user]).scan()
+      expect(packs.map((p) => p.id)).toEqual(['a-perso', 'b-fourni'])
+    })
+
+    it('à identifiant égal, le pack de l’utilisateur remplace le pack fourni', async () => {
+      await pack('commun')
+      const own = await userPack('commun')
+      const loader = new PackLoader([root, user])
+      const { packs } = await loader.scan()
+      expect(packs).toHaveLength(1)
+      expect(packs[0].dir).toBe(own)
+      expect(packs[0].warnings).toHaveLength(1)
+      expect(loader.getPack('commun')?.dir).toBe(own)
+    })
+
+    it('un pack cassé chez l’utilisateur masque le pack fourni et reste listé comme invalide', async () => {
+      await pack('commun')
+      await userPack('commun', '{')
+      const { packs, invalid } = await new PackLoader([root, user]).scan()
+      expect(packs).toEqual([])
+      expect(invalid.map((i) => i.id)).toEqual(['commun'])
+    })
+
+    it('un dossier absent n’empêche pas de lire l’autre', async () => {
+      await pack('fourni')
+      const { packs } = await new PackLoader([root, join(user, 'inexistant')]).scan()
+      expect(packs.map((p) => p.id)).toEqual(['fourni'])
+    })
+  })
 })

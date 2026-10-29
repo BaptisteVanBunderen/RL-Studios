@@ -39,7 +39,7 @@ Conséquences :
        │                                                  ▼
        └──────────────────────────────────────────  OverlayServer ── HTTP (packs + SDK) + WS (topics), état courant à la connexion
                                                           ▲
- PackLoader ── scanne /overlays, valide les manifestes ───┤
+ PackLoader ── scanne les dossiers de packs, valide les manifestes ───┤
  ConfigStore ── positions, tailles, modules actifs, valeurs de réglages, raccourci, joueur local, ports
  OverlayWindowManager ── fenêtres transparentes, ancres, multi-écrans, mode édition
  GameSetup ── détection Steam/Epic, lecture/écriture de l'ini (+ sauvegarde), relance du jeu
@@ -96,11 +96,19 @@ src/
   server/        OverlayServer (HTTP + WebSocket), routes, safePath, sdk/rlstudio.js (embarqué tel quel)
   preload/       preload du client uniquement
   renderer/      client React + Tailwind
-overlays/        packs (extraResources → reste éditable après installation) ; `example/` = pack de démonstration du SDK
+overlays/        packs FOURNIS (extraResources → `resources/overlays`, remplacés à chaque mise à jour) ; `example/` = pack de démonstration du SDK. Les packs de l'utilisateur vont dans `<userData>/overlays` (voir « Dossiers de packs »)
 captures/        trames de référence (.jsonl.gz) pour le rejeu et les tests
 tools/           scripts autonomes : capture, observation, test des commandes
 docs/            architecture, constats API, guide de création d'overlay (P7)
 ```
+
+## Dossiers de packs (fournis / utilisateur)
+
+- Deux dossiers, lus dans cet ordre : les packs **fournis** (`overlays/` en développement, `resources/overlays` une fois installé) puis ceux de **l'utilisateur** (`<userData>/overlays`, soit `%APPDATA%
+l-studiooverlays`).
+- Pourquoi : l'installeur (NSIS, par utilisateur) réécrit `resources/overlays` à chaque mise à jour ou réinstallation ; un pack déposé ou modifié là disparaîtrait. `<userData>` n'est jamais touché par l'installeur ni par la désinstallation.
+- À identifiant égal, le pack de l'utilisateur **remplace** le pack fourni (avertissement « remplace le pack du même nom de … » sur le pack). Pour modifier un pack fourni : le copier chez l'utilisateur. S'il est cassé, il reste listé comme invalide et masque quand même le pack fourni (pas de repli silencieux).
+- Le client ouvre le dossier de l'utilisateur (« Dossier overlays »). `Services` le crée au démarrage. Sans `userOverlaysDir` (tests), le dossier fourni sert aux deux.
 
 ## Format du manifeste (`overlays/<pack-id>/manifest.json`)
 
@@ -180,7 +188,7 @@ docs/            architecture, constats API, guide de création d'overlay (P7)
 - Champs facultatifs et valeurs par défaut : `description`, `author` → vides ; `defaultPosition` → `top-left` 0/0 ; `data`, `settings` → vides. Obligatoires : `manifestVersion` (= 1), `name`, `version` (semver), au moins un module avec `id`, `name`, `entry`, `size`.
 - Contrôles de cohérence : identifiants de module et clés de réglage uniques ; `default` d'un réglage dans ses bornes / ses options / `maxLength` ; couleur `#rrggbb[aa]`.
 - `entry` et `preview` : refus lexical (`..`, `/x`, `\x`, `C:\x`) à la validation, puis sur disque (`PackLoader`) : le fichier doit exister, être un fichier et rester dans le pack APRÈS résolution des liens symboliques. Un `preview` introuvable est un avertissement ; une page d'entrée introuvable est une erreur.
-- `PackLoader` : un sous-dossier de `overlays/` = un pack, identifiant = nom du dossier (`[a-z0-9-]`, sinon pack invalide). Les fichiers et dossiers cachés sont ignorés. Un `manifest.json` avec BOM UTF-8 (éditeurs Windows) est accepté ; au-delà de 1 Mo il est refusé. Un pack cassé n'empêche pas les autres de se charger ; l'actualisation est à la demande (bouton du client), pas surveillée.
+- `PackLoader` : un sous-dossier d'un dossier de packs = un pack, identifiant = nom du dossier (`[a-z0-9-]`, sinon pack invalide). Les fichiers et dossiers cachés sont ignorés. Un `manifest.json` avec BOM UTF-8 (éditeurs Windows) est accepté ; au-delà de 1 Mo il est refusé. Un pack cassé n'empêche pas les autres de se charger ; l'actualisation est à la demande (bouton du client), pas surveillée.
 
 ### Les six types de réglages (P4)
 
