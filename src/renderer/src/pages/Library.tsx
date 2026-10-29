@@ -1,7 +1,7 @@
 import type { InvalidPackSummary, PackSummary } from '@core/index'
 import { useAction, useApp } from '../appContext'
 import { ConnectionPill } from '../components/ConnectionPill'
-import { RefreshIcon } from '../components/icons'
+import { BookIcon, RefreshIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { SessionBar } from '../components/SessionControls'
 import { Button, Chip, IconButton, Toggle } from '../components/ui'
@@ -91,7 +91,7 @@ function InvalidPackCard({ pack }: { pack: InvalidPackSummary }): React.JSX.Elem
 }
 
 export function Library(): React.JSX.Element {
-  const { state, tr } = useApp()
+  const { state, go, tr } = useApp()
   const run = useAction()
   const { packs, invalid } = state.packs
   const activeModules = packs.reduce((n, p) => n + p.modules.filter((m) => m.enabled).length, 0)
@@ -134,6 +134,17 @@ export function Library(): React.JSX.Element {
             <span className="font-semibold">{tr('Ajouter un overlay', 'Add an overlay')}</span>
             <span className="text-sm text-mute">
               {tr('Dépose un dossier dans overlays/', 'Drop a folder into overlays/')}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => go({ name: 'guide' })}
+            className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-line bg-card p-6 text-sub transition hover:border-line-hover hover:text-text"
+          >
+            <BookIcon size={24} />
+            <span className="font-semibold">{tr('Créer un overlay', 'Create an overlay')}</span>
+            <span className="text-sm text-mute">
+              {tr('Le guide, pas à pas', 'The step-by-step guide')}
             </span>
           </button>
         </div>

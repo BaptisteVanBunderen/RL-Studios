@@ -1,12 +1,13 @@
 import { createContext, useContext } from 'react'
 import type { AppState } from '@core/index'
 
-/** Écran affiché. La navigation est un simple état : pas besoin d'un routeur pour 4 écrans. */
+/** Écran affiché. La navigation est un simple état : pas besoin d'un routeur pour 5 écrans. */
 export type View =
   | { name: 'library' }
   | { name: 'pack'; packId: string }
   | { name: 'module'; key: string }
   | { name: 'settings' }
+  | { name: 'guide' }
 
 interface AppContextValue {
   state: AppState

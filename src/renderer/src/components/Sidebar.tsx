@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { View } from '../appContext'
 import { useAction, useApp } from '../appContext'
-import { FolderIcon, GearIcon, GridIcon, LogoMark } from './icons'
+import { BookIcon, FolderIcon, GearIcon, GridIcon, LogoMark } from './icons'
 
 function NavButton({
   active,
@@ -52,6 +52,13 @@ export function Sidebar({ view }: { view: View }): React.JSX.Element {
         onClick={() => go({ name: 'settings' })}
       >
         <GearIcon />
+      </NavButton>
+      <NavButton
+        label={tr('Guide de création', 'Creation guide')}
+        active={view.name === 'guide'}
+        onClick={() => go({ name: 'guide' })}
+      >
+        <BookIcon />
       </NavButton>
       <NavButton
         label={tr('Ouvrir le dossier des overlays', 'Open the overlays folder')}
