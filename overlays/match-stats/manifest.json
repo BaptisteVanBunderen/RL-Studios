@@ -9,16 +9,10 @@
       "id": "demos",
       "name": "Démolitions",
       "description": "Démolitions faites et subies, sur le match en cours et sur la session",
+      "category": "stats",
       "entry": "modules/demos.html",
-      "size": {
-        "width": 300,
-        "height": 112
-      },
-      "defaultPosition": {
-        "anchor": "bottom-left",
-        "x": 20,
-        "y": 20
-      },
+      "size": { "width": 300, "height": 112 },
+      "defaultPosition": { "anchor": "bottom-left", "x": 20, "y": 20 },
       "data": ["match", "session"],
       "settings": [
         {
@@ -37,16 +31,10 @@
       "id": "ball-speed",
       "name": "Vitesse de la balle",
       "description": "Vitesse actuelle de la balle, record du match et vitesse du dernier but",
+      "category": "match",
       "entry": "modules/ball-speed.html",
-      "size": {
-        "width": 300,
-        "height": 112
-      },
-      "defaultPosition": {
-        "anchor": "bottom",
-        "x": 0,
-        "y": 20
-      },
+      "size": { "width": 300, "height": 112 },
+      "defaultPosition": { "anchor": "bottom", "x": 0, "y": 20 },
       "data": ["match", "event"],
       "settings": [
         {
@@ -87,16 +75,10 @@
       "id": "accuracy",
       "name": "Précision",
       "description": "Tirs, buts et pourcentage de réussite, sur le match et sur la session",
+      "category": "stats",
       "entry": "modules/accuracy.html",
-      "size": {
-        "width": 300,
-        "height": 112
-      },
-      "defaultPosition": {
-        "anchor": "bottom-right",
-        "x": 20,
-        "y": 20
-      },
+      "size": { "width": 300, "height": 112 },
+      "defaultPosition": { "anchor": "bottom-right", "x": 20, "y": 20 },
       "data": ["match", "session"],
       "settings": [
         {
@@ -121,16 +103,10 @@
       "id": "boost",
       "name": "Jauge de boost",
       "description": "Boost restant et vitesse de ta voiture",
+      "category": "match",
       "entry": "modules/boost.html",
-      "size": {
-        "width": 170,
-        "height": 190
-      },
-      "defaultPosition": {
-        "anchor": "bottom-right",
-        "x": 340,
-        "y": 20
-      },
+      "size": { "width": 170, "height": 190 },
+      "defaultPosition": { "anchor": "bottom-right", "x": 340, "y": 20 },
       "data": ["match"],
       "settings": [
         {

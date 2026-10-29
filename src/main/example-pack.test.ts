@@ -63,6 +63,22 @@ describe('packs livrés avec l’application (dossier overlays/)', () => {
     ])
   })
 
+  it('chaque module livré déclare son genre (panneau d’aide du client)', async () => {
+    const { packs } = await loader.scan()
+    const categories = Object.fromEntries(
+      packs.flatMap((p) => p.manifest.modules.map((m) => [`${p.id}/${m.id}`, m.category]))
+    )
+    expect(categories).toEqual({
+      'example/session': 'session',
+      'tracker-session/bar-slice': 'session',
+      'scoreboard/board': 'match',
+      'match-stats/demos': 'stats',
+      'match-stats/ball-speed': 'match',
+      'match-stats/accuracy': 'stats',
+      'match-stats/boost': 'match'
+    })
+  })
+
   it('aucun overlay livré ne parle l’ancien protocole ni ne dépend du port 8765', async () => {
     const { readFile, readdir } = await import('node:fs/promises')
     const root = join(process.cwd(), 'overlays')

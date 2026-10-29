@@ -13,7 +13,7 @@ import { ObsPanel } from '../components/ObsPanel'
 import { LivePreview } from '../components/LivePreview'
 import { PageHeader } from '../components/PageHeader'
 import { SettingField } from '../components/SettingFields'
-import { SessionPanel } from '../components/SessionControls'
+import { SessionPanel, StatsPanel } from '../components/SessionControls'
 import { Button, Panel, PanelTitle, Toggle } from '../components/ui'
 
 /** Champ numérique (X, Y) : on tape librement, la valeur part à la sortie du champ ou sur Entrée. */
@@ -204,6 +204,8 @@ export function ModulePage({ moduleKey }: { moduleKey: string }): React.JSX.Elem
     )
   }
 
+  const panel = module.category ?? (module.data.includes('session') ? 'session' : null)
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
@@ -238,7 +240,8 @@ export function ModulePage({ moduleKey }: { moduleKey: string }): React.JSX.Elem
               />
             </div>
           </Panel>
-          <SessionPanel />
+          {panel === 'session' && <SessionPanel />}
+          {panel === 'stats' && <StatsPanel />}
           <ObsPanel module={module} />
         </div>
 

@@ -9,6 +9,7 @@
       "id": "session",
       "name": "Barre de session",
       "description": "Victoires, défaites, série et score du match en cours",
+      "category": "session",
       "entry": "modules/session.html",
       "size": { "width": 420, "height": 56 },
       "defaultPosition": { "anchor": "top-right", "x": 20, "y": 20 },

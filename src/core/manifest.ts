@@ -25,6 +25,12 @@ export const ANCHORS = [
 export const MANIFEST_TOPICS = ['session', 'match', 'event', 'connection'] as const
 
 /**
+ * Genre d'un module : choisit le panneau d'aide affiché dans le client. `session` = victoires,
+ * défaites, série ; `stats` = totaux de statistiques de la session ; `match` = état du match.
+ */
+export const MODULE_CATEGORIES = ['session', 'stats', 'match'] as const
+
+/**
  * Chemin relatif sûr : ni vide, ni absolu (`/x`, `\x`, `C:\x`), sans segment `..`. Empêche un
  * manifeste de désigner un fichier hors du dossier de son pack. Ce test est lexical : PackLoader
  * vérifie en plus, sur disque, que le fichier résolu reste dans le pack (liens symboliques).
@@ -205,6 +211,7 @@ const moduleSchema = z
     /** Taille de référence en pixels logiques. */
     size: sizeSchema,
     defaultPosition: positionSchema.default({ anchor: 'top-left', x: 0, y: 0 }),
+    category: z.enum(MODULE_CATEGORIES).optional(),
     data: z.array(z.enum(MANIFEST_TOPICS)).default([]),
     settings: z.array(settingSchema).default([])
   })
@@ -236,6 +243,7 @@ export type Anchor = (typeof ANCHORS)[number]
 /** Ancre et décalage d'un module (position par défaut du manifeste ou choix de l'utilisateur). */
 export type Position = z.output<typeof positionSchema>
 export type ManifestTopic = (typeof MANIFEST_TOPICS)[number]
+export type ModuleCategory = (typeof MODULE_CATEGORIES)[number]
 
 export type ManifestResult =
   { ok: true; manifest: Manifest; warnings: string[] } | { ok: false; errors: string[] }

@@ -108,6 +108,7 @@ function module(key: string, over: Partial<ModuleSummary> = {}): ModuleSummary {
     defaultPosition: { anchor: 'top-left', x: 0, y: 0 },
     scale: 1,
     data: [],
+    category: null,
     settings: [],
     values: {},
     ...over

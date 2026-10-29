@@ -9,6 +9,7 @@
       "id": "bar-slice",
       "name": "Session Bar",
       "description": "Bandeau compact pour le haut de l'écran : winrate, victoires, défaites, série, meilleure série",
+      "category": "session",
       "entry": "modules/bar-slice.html",
       "size": { "width": 425, "height": 47 },
       "defaultPosition": { "anchor": "top-right", "x": 20, "y": 0 },

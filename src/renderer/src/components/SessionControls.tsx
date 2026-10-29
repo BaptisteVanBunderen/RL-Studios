@@ -111,3 +111,41 @@ export function SessionPanel(): React.JSX.Element {
     </Panel>
   )
 }
+
+const STAT_LABELS: [keyof SessionState['stats'], string][] = [
+  ['shots', 'Tirs'],
+  ['goals', 'Buts'],
+  ['assists', 'Passes décisives'],
+  ['saves', 'Arrêts'],
+  ['demos', 'Démolitions faites'],
+  ['demosTaken', 'Démolitions subies']
+]
+
+/** Totaux de statistiques de la session, pour les modules « stats » (lecture seule, en direct). */
+export function StatsPanel(): React.JSX.Element {
+  const { state } = useApp()
+  const run = useAction()
+  const { stats } = state.session
+
+  return (
+    <Panel>
+      <PanelTitle aside="commune à tous les overlays">Statistiques de la session</PanelTitle>
+      <div className="grid grid-cols-2 gap-3">
+        {STAT_LABELS.map(([key, label]) => (
+          <Cell key={key} label={label}>
+            <b className="text-lg font-semibold tabular-nums">{stats[key]}</b>
+          </Cell>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <p className="text-sm text-mute">
+          Les totaux montent à chaque tir, but ou démolition. Les remettre à zéro réinitialise toute
+          la session (victoires et défaites aussi).
+        </p>
+        <Button className="shrink-0" onClick={() => run(window.rlstudio.resetSession())}>
+          Réinitialiser
+        </Button>
+      </div>
+    </Panel>
+  )
+}

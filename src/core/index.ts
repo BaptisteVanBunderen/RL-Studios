@@ -30,6 +30,7 @@ export {
   ANCHORS,
   ID_PATTERN,
   MANIFEST_TOPICS,
+  MODULE_CATEGORIES,
   isSafeRelativePath,
   manifestSchema,
   parseManifest,
@@ -41,6 +42,7 @@ export type {
   Manifest,
   ManifestResult,
   ManifestTopic,
+  ModuleCategory,
   ModuleManifest,
   Position,
   SettingDefinition

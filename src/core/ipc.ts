@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { AppConfig } from './config'
 import { IPC_EVENTS, IPC_INVOKE } from './ipcChannels'
-import type { ManifestTopic, Position, SettingDefinition } from './manifest'
+import type { ManifestTopic, ModuleCategory, Position, SettingDefinition } from './manifest'
 import { ID_PATTERN, positionSchema } from './manifest'
 import { isModuleKey, moduleKey, type PackScan } from './packs'
 import type { Rect } from './placement'
@@ -33,6 +33,8 @@ export interface ModuleSummary {
   /** Échelle effective (1 = taille de référence). */
   scale: number
   data: ManifestTopic[]
+  /** Genre déclaré par le module ; `null` s'il n'en déclare pas. */
+  category: ModuleCategory | null
   settings: SettingDefinition[]
   /** Valeur effective de chaque réglage : celle de l'utilisateur si valide, sinon le défaut. */
   values: Record<string, SettingValue>
@@ -123,6 +125,7 @@ export function toPacksSnapshot(scan: PackScan, config: Pick<AppConfig, 'modules
           defaultPosition: module.defaultPosition,
           scale: config.modules[key]?.scale ?? 1,
           data: module.data,
+          category: module.category ?? null,
           settings: module.settings,
           values: resolveSettings(module, config.modules[key]?.settings)
         }

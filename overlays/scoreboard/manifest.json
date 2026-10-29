@@ -9,6 +9,7 @@
       "id": "board",
       "name": "Tableau de score",
       "description": "Équipes bleue et orange, joueurs triés par score, avec buts, passes décisives, arrêts et tirs",
+      "category": "match",
       "entry": "modules/board.html",
       "size": { "width": 460, "height": 290 },
       "defaultPosition": { "anchor": "left", "x": 20, "y": 0 },
